@@ -5,46 +5,85 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>イベント分析</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    body { font-family: system-ui, sans-serif; padding: 16px; max-width: 980px; margin: 0 auto; }
-    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
-    input { padding: 8px; min-width: 260px; }
+    body { font-family: system-ui, sans-serif; padding: 16px; max-width: 1100px; margin: 0 auto; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+    input, textarea { padding: 8px; }
+    input { min-width: 260px; }
+    textarea { width: 100%; min-height: 220px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
     button { padding: 8px 12px; cursor: pointer; }
-    canvas { margin-top: 16px; }
-    pre { background:#f6f6f6; padding:12px; overflow:auto; }
+    .card { border: 1px solid #ddd; border-radius: 10px; padding: 12px; margin: 12px 0; }
+    pre { background:#f6f6f6; padding:12px; overflow:auto; border-radius: 10px; }
+    .ok { color: #0a7; font-weight: 700; }
+    .ng { color: #c00; font-weight: 700; }
   </style>
 </head>
 <body>
   <h1>イベント分析（公開版：順位なし）</h1>
 
-  <div class="row">
-    <label>event_id：</label>
-    <input id="eventId" value="BA-2026-02" />
-    <button id="loadBtn">読み込む</button>
+  <div class="card">
+    <h2>① ログイン（自分だけ投稿）</h2>
+    <div class="row">
+      <input id="email" placeholder="自分のメールアドレス" />
+      <button id="loginBtn">ログインリンク送信</button>
+      <button id="logoutBtn">ログアウト</button>
+    </div>
+    <div id="authStatus"></div>
+    <p style="margin:6px 0;color:#555;">※メールに届くリンクを開くとログイン完了。以後このページで保存できる。</p>
   </div>
 
-  <canvas id="participantsChart" height="120"></canvas>
-  <canvas id="difficultyChart" height="120"></canvas>
+  <div class="card">
+    <h2>② 公開ページ表示（読み取り）</h2>
+    <div class="row">
+      <label>event_id：</label>
+      <input id="eventId" value="BA-2026-02" />
+      <button id="loadBtn">読み込む</button>
+    </div>
 
-  <h3>取得データ（先頭3件）</h3>
-  <pre id="debug"></pre>
+    <canvas id="participantsChart" height="120"></canvas>
+    <canvas id="difficultyChart" height="120"></canvas>
+
+    <h3>取得データ（先頭3件）</h3>
+    <pre id="debug"></pre>
+  </div>
+
+  <div class="card">
+    <h2>③ データ入力（コピペ→プレビュー→保存）</h2>
+    <p style="margin:6px 0;color:#555;">
+      貼り付け形式：<br/>
+      日時 / 自分の順位 / Lunatic / Torment / Insane / Extreme / Hardcore / Veryhard / Hard / Normal / 参加人数
+    </p>
+    <textarea id="paste" placeholder="ここにログをコピペ（ヘッダ行込みOK）"></textarea>
+
+    <div class="row">
+      <button id="previewBtn">プレビュー</button>
+      <button id="saveBtn">保存（DBへ一括）</button>
+      <span id="previewStatus"></span>
+    </div>
+
+    <h3>プレビュー（先頭3行）</h3>
+    <pre id="previewOut"></pre>
+  </div>
 
   <script>
-    // ★ここを書き換え
+    // ★あなたの値（すでに動いてるやつをそのまま）
     const PROJECT_URL = "https://lfvxfvcijdtnpuhrlnqj.supabase.co";
     const PUBLISHABLE_KEY = "sb_publishable_3oNlDsSU06CHAJkhrJ9Tvg_4WmLAZ6o";
 
+    // Supabase client（Auth + DB操作用）
+    const supabaseClient = supabase.createClient(PROJECT_URL, PUBLISHABLE_KEY);
+
+    // ====== 公開グラフ（読み取り） ======
     let chart1 = null;
     let chart2 = null;
 
-    async function fetchSnapshots(eventId) {
-      // event_idで絞る（公開ページ用）
+    async function fetchSnapshotsPublic(eventId) {
       const url = `${PROJECT_URL}/rest/v1/snapshots_public?select=captured_at,participants,lunatic,torment,insane,extreme,hardcore,veryhard,hard,normal&event_id=eq.${encodeURIComponent(eventId)}&order=captured_at.asc`;
 
       const res = await fetch(url, {
         headers: {
           apikey: PUBLISHABLE_KEY,
-          // Supabase環境によってはAuthorizationも要求されることがあるので両方入れておく
           Authorization: `Bearer ${PUBLISHABLE_KEY}`,
         }
       });
@@ -60,19 +99,14 @@
       const labels = rows.map(r => new Date(r.captured_at).toLocaleString());
       const participants = rows.map(r => r.participants);
 
-      // 参加人数推移
       const ctx1 = document.getElementById("participantsChart");
       if (chart1) chart1.destroy();
       chart1 = new Chart(ctx1, {
         type: "line",
-        data: {
-          labels,
-          datasets: [{ label: "参加人数", data: participants }]
-        },
+        data: { labels, datasets: [{ label: "参加人数", data: participants }] },
         options: { responsive: true }
       });
 
-      // 難易度別人数（複数線）
       const ctx2 = document.getElementById("difficultyChart");
       if (chart2) chart2.destroy();
       chart2 = new Chart(ctx2, {
@@ -94,13 +128,13 @@
       });
     }
 
-    async function load() {
+    async function loadPublic() {
       const eventId = document.getElementById("eventId").value.trim();
       if (!eventId) return;
 
       document.getElementById("debug").textContent = "読み込み中…";
       try {
-        const rows = await fetchSnapshots(eventId);
+        const rows = await fetchSnapshotsPublic(eventId);
         document.getElementById("debug").textContent = JSON.stringify(rows.slice(0, 3), null, 2);
         renderCharts(rows);
       } catch (e) {
@@ -108,9 +142,156 @@
       }
     }
 
-    document.getElementById("loadBtn").addEventListener("click", load);
-    // 初回自動ロード
-    load();
+    // ====== 入力（コピペ→パース） ======
+    function splitLine(line) {
+      // タブ優先、なければ複数スペースでも分ける
+      if (line.includes("\t")) return line.split("\t");
+      return line.trim().split(/\s+/);
+    }
+
+    function parsePasted(text) {
+      const lines = text
+        .split(/\r?\n/)
+        .map(s => s.trim())
+        .filter(Boolean);
+
+      if (lines.length === 0) return [];
+
+      // 先頭がヘッダっぽいなら捨てる（"自分の順位"が含まれてたらヘッダ判定）
+      const startIdx = (lines[0].includes("自分の順位") || lines[0].includes("参加人数")) ? 1 : 0;
+
+      const rows = [];
+      for (let i = startIdx; i < lines.length; i++) {
+        const cols = splitLine(lines[i]);
+        // 期待：11列（日時 + 10個）
+        if (cols.length < 11) continue;
+
+        const captured_at = new Date(cols[0].replace(/\//g, "-")); // "2026/2/18"対策
+        if (Number.isNaN(captured_at.getTime())) continue;
+
+        const my_rank = Number(cols[1]);
+        const lunatic = Number(cols[2]);
+        const torment = Number(cols[3]);
+        const insane  = Number(cols[4]);
+        const extreme = Number(cols[5]);
+        const hardcore= Number(cols[6]);
+        const veryhard= Number(cols[7]);
+        const hard    = Number(cols[8]);
+        const normal  = Number(cols[9]);
+        const participants = Number(cols[10]);
+
+        // 数字が壊れてる行はスキップ
+        if (![my_rank,lunatic,torment,insane,extreme,hardcore,veryhard,hard,normal,participants].every(n => Number.isFinite(n))) {
+          continue;
+        }
+
+        rows.push({
+          captured_at: captured_at.toISOString(),
+          my_rank, lunatic, torment, insane, extreme, hardcore, veryhard, hard, normal, participants
+        });
+      }
+      return rows;
+    }
+
+    function showPreview(parsed) {
+      const out = parsed.slice(0, 3);
+      document.getElementById("previewOut").textContent = JSON.stringify(out, null, 2);
+      const status = document.getElementById("previewStatus");
+      status.textContent = `読み取り ${parsed.length} 行`;
+      status.className = parsed.length ? "ok" : "ng";
+    }
+
+    // ====== Auth（自分だけ投稿） ======
+    async function refreshAuthStatus() {
+      const { data } = await supabaseClient.auth.getSession();
+      const session = data.session;
+      const el = document.getElementById("authStatus");
+
+      if (session?.user) {
+        el.innerHTML = `<span class="ok">ログイン中</span>：${session.user.email}（uid: ${session.user.id}）`;
+      } else {
+        el.innerHTML = `<span class="ng">未ログイン</span>（保存はできない）`;
+      }
+    }
+
+    document.getElementById("loginBtn").addEventListener("click", async () => {
+      const email = document.getElementById("email").value.trim();
+      if (!email) return alert("メールアドレスを入れて");
+      const { error } = await supabaseClient.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: window.location.href }
+      });
+      if (error) alert(error.message);
+      else alert("ログインリンクを送信した。メールを開け。");
+    });
+
+    document.getElementById("logoutBtn").addEventListener("click", async () => {
+      await supabaseClient.auth.signOut();
+      await refreshAuthStatus();
+    });
+
+    // URLにログイン情報が付いて戻ってきた時もあるので、ページ起動時に状態更新
+    supabaseClient.auth.onAuthStateChange(() => refreshAuthStatus());
+
+    // ====== 保存（DBへ一括） ======
+    document.getElementById("previewBtn").addEventListener("click", async () => {
+      const parsed = parsePasted(document.getElementById("paste").value);
+      showPreview(parsed);
+    });
+
+    document.getElementById("saveBtn").addEventListener("click", async () => {
+      const eventId = document.getElementById("eventId").value.trim();
+      if (!eventId) return alert("event_id が空");
+
+      const { data } = await supabaseClient.auth.getSession();
+      const user = data.session?.user;
+      if (!user) return alert("未ログイン。先にログインして。");
+
+      const parsed = parsePasted(document.getElementById("paste").value);
+      showPreview(parsed);
+      if (parsed.length === 0) return alert("取り込める行がない（区切りや列数を確認）");
+
+      // 公開用（順位なし）
+      const publicRows = parsed.map(r => ({
+        event_id: eventId,
+        captured_at: r.captured_at,
+        participants: r.participants,
+        lunatic: r.lunatic,
+        torment: r.torment,
+        insane: r.insane,
+        extreme: r.extreme,
+        hardcore: r.hardcore,
+        veryhard: r.veryhard,
+        hard: r.hard,
+        normal: r.normal,
+        owner: user.id
+      }));
+
+      // 非公開（順位だけ）
+      const privateRows = parsed.map(r => ({
+        event_id: eventId,
+        captured_at: r.captured_at,
+        my_rank: r.my_rank,
+        owner: user.id
+      }));
+
+      // まず public を入れる
+      const ins1 = await supabaseClient.from("snapshots_public").insert(publicRows);
+      if (ins1.error) return alert("public保存失敗: " + ins1.error.message);
+
+      // 次に private
+      const ins2 = await supabaseClient.from("snapshots_private").insert(privateRows);
+      if (ins2.error) return alert("private保存失敗: " + ins2.error.message);
+
+      alert(`保存完了：${parsed.length}行`);
+      await loadPublic(); // 保存後にグラフ更新
+    });
+
+    document.getElementById("loadBtn").addEventListener("click", loadPublic);
+
+    // 初期
+    refreshAuthStatus();
+    loadPublic();
   </script>
 </body>
 </html>
