@@ -3,15 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>イベント分析</title>
+  <title>イベント分析（診断版）</title>
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-  <!-- Time scale adapter (Luxon) -->
+  <!-- Time scale adapter -->
   <script src="https://cdn.jsdelivr.net/npm/luxon@3"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1"></script>
-
   <!-- Supabase JS v2 -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
@@ -20,131 +18,139 @@
     .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
     input, textarea { padding: 8px; }
     input { min-width: 260px; }
-    textarea { width: 100%; min-height: 220px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    textarea { width: 100%; min-height: 200px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
     button { padding: 8px 12px; cursor: pointer; }
     .card { border: 1px solid #ddd; border-radius: 10px; padding: 12px; margin: 12px 0; }
     pre { background:#f6f6f6; padding:12px; overflow:auto; border-radius: 10px; }
     .ok { color: #0a7; font-weight: 700; }
     .ng { color: #c00; font-weight: 700; }
     .small { color:#666; font-size: 13px; margin: 6px 0; }
-    .danger { color:#c00; font-weight: 700; }
+    code { background:#f0f0f0; padding:2px 4px; border-radius:6px; }
   </style>
 </head>
 
 <body>
-  <h1>イベント分析（公開：順位なし / 管理：自分だけ投稿）</h1>
+  <h1>イベント分析（診断版）</h1>
+  <p class="small">
+    まずこのページで <b>「どこで失敗してるか」</b>を可視化します。<br>
+    表示されるログ（下の <b>診断ログ</b>）を見れば、原因が一撃で確定します。
+  </p>
 
   <div class="card">
-    <h2>0) 設定（あなたのSupabase）</h2>
-    <p class="small">
-      ※ここは基本いじらない。Project URL と publishable key は Supabase の API Keys 画面のもの。<br>
-      ※Auth の URL Configuration は <span class="danger">Site URL と Redirect URLs</span> を GitHub Pages に設定済みの前提。
-    </p>
-  </div>
-
-  <div class="card">
-    <h2>① ログイン（自分だけ投稿）</h2>
-    <div class="row">
-      <input id="email" placeholder="自分のメールアドレス" />
-      <button id="loginBtn">ログインリンク送信</button>
-      <button id="logoutBtn">ログアウト</button>
+    <h2>0) 接続設定</h2>
+    <div class="small">
+      PROJECT_URL: <code id="showUrl"></code><br>
+      SITE_URL: <code id="showSite"></code><br>
+      KEY: <code id="showKey"></code>
     </div>
-    <div id="authStatus"></div>
     <p class="small">
-      ※メールのリンクを踏んでこのページに戻ればログイン完了。<br>
-      ※「保存」はログイン必須（RLSで弾く）。
+      ※ KEYは先頭だけ表示。ここがズレてたら全部コケる。
     </p>
   </div>
 
   <div class="card">
-    <h2>② 公開グラフ（読み取り：順位なし）</h2>
+    <h2>1) 読み込み（public）</h2>
     <div class="row">
       <label>event_id：</label>
       <input id="eventId" value="BA-2026-02" />
-      <button id="loadBtn">読み込む</button>
+      <button id="testReadBtn">接続テスト（snapshots_publicを1件読む）</button>
+      <button id="loadBtn">読み込む（グラフ）</button>
     </div>
-
-    <p class="small">
-      横軸は <b>本物の時系列（time scale）</b>。データ間隔が不規則でも自然に並ぶ。
-    </p>
+    <pre id="readLog"></pre>
 
     <canvas id="participantsChart" height="120"></canvas>
     <canvas id="difficultyChart" height="120"></canvas>
-
-    <h3>取得データ（先頭3件）</h3>
-    <pre id="debug"></pre>
   </div>
 
   <div class="card">
-    <h2>③ データ入力（コピペ→プレビュー→保存）</h2>
+    <h2>2) ログイン（自分だけ投稿）</h2>
+    <div class="row">
+      <input id="email" placeholder="自分のメールアドレス" />
+      <button id="loginBtn">ログインリンク送信</button>
+      <button id="sessionBtn">セッション確認</button>
+      <button id="logoutBtn">ログアウト</button>
+    </div>
+    <pre id="authLog"></pre>
+  </div>
 
-    <p class="small">
-      貼り付け形式：<br>
-      <b>日時 / 自分の順位 / Lunatic / Torment / Insane / Extreme / Hardcore / Veryhard / Hard / Normal / 参加人数</b><br>
-      区切りは <b>タブ</b>推奨。スペースでもOK（日時が「日付＋時刻」に分かれてても吸収する）。
-    </p>
-
-    <textarea id="paste" placeholder="ここにログをコピペ（ヘッダ行込みOK）"></textarea>
-
+  <div class="card">
+    <h2>3) 入力（コピペ→プレビュー→保存）</h2>
+    <textarea id="paste" placeholder="ログをコピペ"></textarea>
     <div class="row">
       <button id="previewBtn">プレビュー</button>
-      <button id="saveBtn">保存（DBへ一括）</button>
+      <button id="saveBtn">保存（DBへ）</button>
       <span id="previewStatus"></span>
     </div>
-
-    <h3>プレビュー（先頭3行）</h3>
     <pre id="previewOut"></pre>
+    <pre id="writeLog"></pre>
+  </div>
 
-    <p class="small">
-      保存先：<br>
-      - <b>snapshots_public</b>（順位なし・公開OK）<br>
-      - <b>snapshots_private</b>（順位のみ・非公開）<br>
-      ※どっちも <b>owner = 自分のuid</b> を付ける。
-    </p>
+  <div class="card">
+    <h2>診断ログ（ここが最重要）</h2>
+    <pre id="diag"></pre>
   </div>
 
   <script>
     /**********************************************************************
-     * ★あなたのSupabase（ここだけ正しく）
+     * ★あなたのSupabase（ここがズレると全滅）
      **********************************************************************/
     const PROJECT_URL = "https://lfvxfvcijdtnpuhrlnqj.supabase.co";
     const PUBLISHABLE_KEY = "sb_publishable_3oNlDsSU06CHAJkhrJ9Tvg_4WmLAZ6o";
-
-    // GitHub Pages のURL（Authの戻り先を固定）
     const SITE_URL = "https://fumippo.github.io/raid-analyzer/";
 
-    // Supabase client（Auth + DB操作用）
+    // UI表示
+    document.getElementById("showUrl").textContent = PROJECT_URL;
+    document.getElementById("showSite").textContent = SITE_URL;
+    document.getElementById("showKey").textContent = PUBLISHABLE_KEY.slice(0, 18) + "…";
+
     const supabaseClient = supabase.createClient(PROJECT_URL, PUBLISHABLE_KEY);
 
+    const diag = (msg) => {
+      const el = document.getElementById("diag");
+      el.textContent += msg + "\n";
+    };
+
+    // ページが最新版か確認用
+    diag("PAGE_VERSION: 2026-02-23 vDIAG-3");
+    diag("URL: " + window.location.href);
+
     /**********************************************************************
-     * 0) Auth callback（ここが無いと「確認メール踏んだのにログインにならない」が起きる）
+     * Auth callback: ?code=... をセッション化（ここが無いとログインできないことがある）
      **********************************************************************/
     async function initAuthCallback() {
-      // Supabaseのメールリンクは ?code=... で戻ることがある
       const url = new URL(window.location.href);
       const code = url.searchParams.get("code");
-      if (!code) return;
-
-      const { error } = await supabaseClient.auth.exchangeCodeForSession(window.location.href);
-      if (error) {
-        alert("ログイン確定に失敗: " + error.message);
+      if (!code) {
+        diag("AuthCallback: no code param");
         return;
       }
 
-      // code を消してURLを綺麗にする
+      diag("AuthCallback: code found, exchanging session…");
+      // ★ここがポイント：code を直接渡す
+      const { error } = await supabaseClient.auth.exchangeCodeForSession(code);
+      if (error) {
+        diag("AuthCallback ERROR: " + error.message);
+        document.getElementById("authLog").textContent = "AuthCallback ERROR: " + error.message;
+        return;
+      }
+
       url.searchParams.delete("code");
       window.history.replaceState({}, document.title, url.toString());
+      diag("AuthCallback: session exchanged OK");
     }
 
-    async function refreshAuthStatus() {
-      const { data } = await supabaseClient.auth.getSession();
+    async function showSession() {
+      const { data, error } = await supabaseClient.auth.getSession();
+      if (error) {
+        document.getElementById("authLog").textContent = "getSession ERROR: " + error.message;
+        return;
+      }
       const session = data.session;
-      const el = document.getElementById("authStatus");
-
-      if (session?.user) {
-        el.innerHTML = `<span class="ok">ログイン中</span>：${session.user.email}（uid: ${session.user.id}）`;
+      if (!session?.user) {
+        document.getElementById("authLog").textContent = "未ログイン（sessionなし）";
       } else {
-        el.innerHTML = `<span class="ng">未ログイン</span>（保存はできない）`;
+        document.getElementById("authLog").textContent =
+          "ログイン中\nemail: " + session.user.email + "\nuid: " + session.user.id;
       }
     }
 
@@ -152,66 +158,96 @@
       const email = document.getElementById("email").value.trim();
       if (!email) return alert("メールアドレスを入れて");
 
+      document.getElementById("authLog").textContent = "送信中…";
+      diag("signInWithOtp: sending to " + email + " redirect=" + SITE_URL);
+
       const { error } = await supabaseClient.auth.signInWithOtp({
         email,
-        options: {
-          // 「localhostに戻る事故」を防ぐため固定
-          emailRedirectTo: SITE_URL
-        }
+        options: { emailRedirectTo: SITE_URL }
       });
 
-      if (error) alert(error.message);
-      else alert("ログインリンクを送信した。メールを開け。");
+      if (error) {
+        document.getElementById("authLog").textContent = "OTP送信ERROR: " + error.message;
+        diag("OTP ERROR: " + error.message);
+      } else {
+        document.getElementById("authLog").textContent = "送信OK。メールのリンクを踏め。";
+        diag("OTP OK");
+      }
     });
+
+    document.getElementById("sessionBtn").addEventListener("click", showSession);
 
     document.getElementById("logoutBtn").addEventListener("click", async () => {
       await supabaseClient.auth.signOut();
-      await refreshAuthStatus();
-      alert("ログアウトした");
+      document.getElementById("authLog").textContent = "ログアウトした";
+      diag("signOut OK");
     });
 
-    supabaseClient.auth.onAuthStateChange(() => refreshAuthStatus());
+    supabaseClient.auth.onAuthStateChange((event) => {
+      diag("AuthStateChange: " + event);
+      showSession();
+    });
 
     /**********************************************************************
-     * 1) 公開API（読み取り）
+     * REST読み取り（ステータスと本文を出す）
      **********************************************************************/
-    async function fetchSnapshotsPublic(eventId) {
-      const url =
-        `${PROJECT_URL}/rest/v1/snapshots_public` +
-        `?select=captured_at,participants,lunatic,torment,insane,extreme,hardcore,veryhard,hard,normal` +
-        `&event_id=eq.${encodeURIComponent(eventId)}` +
-        `&order=captured_at.asc`;
+    async function fetchJsonWithLog(url, logElId) {
+      const logEl = document.getElementById(logElId);
+      logEl.textContent = "REQUEST:\n" + url + "\n\n";
 
       const res = await fetch(url, {
         headers: {
           apikey: PUBLISHABLE_KEY,
           Authorization: `Bearer ${PUBLISHABLE_KEY}`,
+          Accept: "application/json"
         }
       });
 
+      const text = await res.text();
+      logEl.textContent += `STATUS: ${res.status}\n\nRESPONSE:\n${text}\n`;
+
+      diag("FETCH " + res.status + " " + url);
+
       if (!res.ok) {
-        const text = await res.text();
         throw new Error(`HTTP ${res.status}: ${text}`);
       }
-      return await res.json();
+
+      // 空文字だとJSON.parseが死ぬのでガード
+      return text ? JSON.parse(text) : null;
     }
+
+    function makeTestReadUrl(eventId) {
+      // 1件だけ読む（存在確認）
+      return `${PROJECT_URL}/rest/v1/snapshots_public?select=*&event_id=eq.${encodeURIComponent(eventId)}&limit=1`;
+    }
+
+    function makeLoadUrl(eventId) {
+      return `${PROJECT_URL}/rest/v1/snapshots_public` +
+        `?select=captured_at,participants,lunatic,torment,insane,extreme,hardcore,veryhard,hard,normal` +
+        `&event_id=eq.${encodeURIComponent(eventId)}` +
+        `&order=captured_at.asc`;
+    }
+
+    document.getElementById("testReadBtn").addEventListener("click", async () => {
+      const eventId = document.getElementById("eventId").value.trim();
+      if (!eventId) return;
+      try {
+        const url = makeTestReadUrl(eventId);
+        await fetchJsonWithLog(url, "readLog");
+      } catch (e) {
+        diag("testRead ERROR: " + e.message);
+      }
+    });
 
     /**********************************************************************
-     * 2) 時系列グラフ描画（横軸 = time scale）
+     * グラフ（横軸 time）
      **********************************************************************/
-    let chart1 = null;
-    let chart2 = null;
-
-    function toJSTLabel(iso) {
-      return new Date(iso).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
-    }
+    let chart1 = null, chart2 = null;
 
     function renderCharts(rows) {
-      rows = [...rows].sort((a, b) => new Date(a.captured_at) - new Date(b.captured_at));
+      rows = [...rows].sort((a,b) => new Date(a.captured_at) - new Date(b.captured_at));
 
-      // {x, y} 形式が time 軸で安定
-      const seriesXY = (key) => rows.map(r => ({ x: r.captured_at, y: r[key] }));
-      const participantsSeries = seriesXY("participants");
+      const series = (key) => rows.map(r => ({ x: r.captured_at, y: r[key] }));
 
       const commonOptions = {
         responsive: true,
@@ -221,82 +257,55 @@
             type: "time",
             time: {
               tooltipFormat: "yyyy-LL-dd HH:mm:ss",
-              displayFormats: {
-                minute: "LL-dd HH:mm",
-                hour: "LL-dd HH:mm",
-                day: "LL-dd"
-              }
-              // unit固定したいなら↓
-              // unit: "hour"
-            },
-            ticks: {
-              callback: function(value) {
-                try { return new Date(value).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }); }
-                catch { return value; }
-              }
-            }
-          }
-        },
-        plugins: {
-          tooltip: {
-            callbacks: {
-              title: function(items) {
-                const iso = items?.[0]?.raw?.x;
-                return iso ? toJSTLabel(iso) : "";
-              }
+              displayFormats: { minute:"LL-dd HH:mm", hour:"LL-dd HH:mm", day:"LL-dd" }
             }
           }
         }
       };
 
-      // 参加人数
       const ctx1 = document.getElementById("participantsChart");
       if (chart1) chart1.destroy();
       chart1 = new Chart(ctx1, {
         type: "line",
-        data: { datasets: [{ label: "参加人数", data: participantsSeries }] },
+        data: { datasets: [{ label: "参加人数", data: series("participants") }] },
         options: commonOptions
       });
 
-      // 難易度別人数
       const ctx2 = document.getElementById("difficultyChart");
       if (chart2) chart2.destroy();
       chart2 = new Chart(ctx2, {
         type: "line",
         data: {
           datasets: [
-            { label: "Lunatic",  data: seriesXY("lunatic") },
-            { label: "Torment",  data: seriesXY("torment") },
-            { label: "Insane",   data: seriesXY("insane") },
-            { label: "Extreme",  data: seriesXY("extreme") },
-            { label: "Hardcore", data: seriesXY("hardcore") },
-            { label: "Veryhard", data: seriesXY("veryhard") },
-            { label: "Hard",     data: seriesXY("hard") },
-            { label: "Normal",   data: seriesXY("normal") }
+            { label: "Lunatic",  data: series("lunatic") },
+            { label: "Torment",  data: series("torment") },
+            { label: "Insane",   data: series("insane") },
+            { label: "Extreme",  data: series("extreme") },
+            { label: "Hardcore", data: series("hardcore") },
+            { label: "Veryhard", data: series("veryhard") },
+            { label: "Hard",     data: series("hard") },
+            { label: "Normal",   data: series("normal") }
           ]
         },
         options: commonOptions
       });
     }
 
-    async function loadPublic() {
+    document.getElementById("loadBtn").addEventListener("click", async () => {
       const eventId = document.getElementById("eventId").value.trim();
       if (!eventId) return;
 
-      document.getElementById("debug").textContent = "読み込み中…";
       try {
-        const rows = await fetchSnapshotsPublic(eventId);
-        document.getElementById("debug").textContent = JSON.stringify(rows.slice(0, 3), null, 2);
-        renderCharts(rows);
+        const url = makeLoadUrl(eventId);
+        const rows = await fetchJsonWithLog(url, "readLog");
+        renderCharts(Array.isArray(rows) ? rows : []);
       } catch (e) {
-        document.getElementById("debug").textContent = String(e);
+        diag("load ERROR: " + e.message);
       }
-    }
-
-    document.getElementById("loadBtn").addEventListener("click", loadPublic);
+    });
 
     /**********************************************************************
-     * 3) コピペのパース（日時が2トークンに分かれても吸収）
+     * コピペパース（日時が2トークンでも吸収）
      **********************************************************************/
     function splitLine(line) {
       if (line.includes("\t")) return line.split("\t");
@@ -304,96 +313,76 @@
     }
 
     function parsePasted(text) {
-      const lines = text
-        .split(/\r?\n/)
-        .map(s => s.trim())
-        .filter(Boolean);
-
+      const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
       if (lines.length === 0) return [];
 
-      const isHeader = (s) =>
-        s.includes("自分の順位") || s.includes("参加人数") || s.includes("captured_at") || s.includes("event_id");
-
+      const isHeader = (s) => s.includes("自分の順位") || s.includes("参加人数");
       let startIdx = isHeader(lines[0]) ? 1 : 0;
 
-      const rows = [];
-
+      const out = [];
       for (let i = startIdx; i < lines.length; i++) {
         const cols = splitLine(lines[i]);
         if (cols.length < 11) continue;
 
-        const looksLikeDate = /^\d{4}\/\d{1,2}\/\d{1,2}$/.test(cols[0]) || /^\d{4}-\d{1,2}-\d{1,2}$/.test(cols[0]);
-        const looksLikeTime = /^\d{1,2}:\d{2}:\d{2}$/.test(cols[1] ?? "");
-        let dtStr;
-        let offset = 0;
+        const looksDate = /^\d{4}\/\d{1,2}\/\d{1,2}$/.test(cols[0]) || /^\d{4}-\d{1,2}-\d{1,2}$/.test(cols[0]);
+        const looksTime = /^\d{1,2}:\d{2}:\d{2}$/.test(cols[1] ?? "");
+        let dtStr, offset = 0;
+        if (looksDate && looksTime) { dtStr = `${cols[0]} ${cols[1]}`; offset = 1; }
+        else { dtStr = cols[0]; offset = 0; }
 
-        if (looksLikeDate && looksLikeTime) {
-          dtStr = `${cols[0]} ${cols[1]}`;
-          offset = 1;
-        } else {
-          dtStr = cols[0];
-          offset = 0;
+        const captured = new Date(dtStr.replace(/\//g, "-"));
+        if (Number.isNaN(captured.getTime())) continue;
+
+        const my_rank = Number(cols[1+offset]);
+        const lunatic = Number(cols[2+offset]);
+        const torment = Number(cols[3+offset]);
+        const insane  = Number(cols[4+offset]);
+        const extreme = Number(cols[5+offset]);
+        const hardcore= Number(cols[6+offset]);
+        const veryhard= Number(cols[7+offset]);
+        const hard    = Number(cols[8+offset]);
+        const normal  = Number(cols[9+offset]);
+        const participants = Number(cols[10+offset]);
+
+        if (![my_rank,lunatic,torment,insane,extreme,hardcore,veryhard,hard,normal,participants].every(n => Number.isFinite(n))) {
+          continue;
         }
 
-        // "/" を "-" に寄せて Date パース
-        const normalized = dtStr.replace(/\//g, "-");
-        const captured_at = new Date(normalized);
-        if (Number.isNaN(captured_at.getTime())) continue;
-
-        const my_rank = Number(cols[1 + offset]);
-        const lunatic = Number(cols[2 + offset]);
-        const torment = Number(cols[3 + offset]);
-        const insane  = Number(cols[4 + offset]);
-        const extreme = Number(cols[5 + offset]);
-        const hardcore= Number(cols[6 + offset]);
-        const veryhard= Number(cols[7 + offset]);
-        const hard    = Number(cols[8 + offset]);
-        const normal  = Number(cols[9 + offset]);
-        const participants = Number(cols[10 + offset]);
-
-        if (![my_rank,lunatic,torment,insane,extreme,hardcore,veryhard,hard,normal,participants]
-          .every(n => Number.isFinite(n))) continue;
-
-        rows.push({
-          captured_at: captured_at.toISOString(),
+        out.push({
+          captured_at: captured.toISOString(),
           my_rank, lunatic, torment, insane, extreme, hardcore, veryhard, hard, normal, participants
         });
       }
-
-      return rows;
-    }
-
-    function showPreview(parsed) {
-      document.getElementById("previewOut").textContent =
-        JSON.stringify(parsed.slice(0, 3), null, 2);
-
-      const status = document.getElementById("previewStatus");
-      status.textContent = `読み取り ${parsed.length} 行`;
-      status.className = parsed.length ? "ok" : "ng";
+      return out;
     }
 
     document.getElementById("previewBtn").addEventListener("click", () => {
       const parsed = parsePasted(document.getElementById("paste").value);
-      showPreview(parsed);
+      document.getElementById("previewOut").textContent = JSON.stringify(parsed.slice(0,3), null, 2);
+      const s = document.getElementById("previewStatus");
+      s.textContent = `読み取り ${parsed.length} 行`;
+      s.className = parsed.length ? "ok" : "ng";
     });
 
     /**********************************************************************
-     * 4) 保存（public＋privateに一括INSERT）
+     * 保存（insertのエラーを全部表示）
      **********************************************************************/
     document.getElementById("saveBtn").addEventListener("click", async () => {
       const eventId = document.getElementById("eventId").value.trim();
-      if (!eventId) return alert("event_id が空");
+      const parsed = parsePasted(document.getElementById("paste").value);
+      document.getElementById("writeLog").textContent = "";
 
-      // ログイン確認
       const { data } = await supabaseClient.auth.getSession();
       const user = data.session?.user;
-      if (!user) return alert("未ログイン。先にログインして。");
+      if (!user) {
+        document.getElementById("writeLog").textContent = "未ログイン。まずログインして。";
+        return;
+      }
+      if (parsed.length === 0) {
+        document.getElementById("writeLog").textContent = "取り込み行が0。プレビューを確認して。";
+        return;
+      }
 
-      const parsed = parsePasted(document.getElementById("paste").value);
-      showPreview(parsed);
-      if (parsed.length === 0) return alert("取り込める行がない（区切りや列数を確認）");
-
-      // 公開用（順位なし）
       const publicRows = parsed.map(r => ({
         event_id: eventId,
         captured_at: r.captured_at,
@@ -409,7 +398,6 @@
         owner: user.id
       }));
 
-      // 非公開（順位だけ）
       const privateRows = parsed.map(r => ({
         event_id: eventId,
         captured_at: r.captured_at,
@@ -417,26 +405,38 @@
         owner: user.id
       }));
 
-      // 先にpublic
+      document.getElementById("writeLog").textContent = "保存中…\n";
+
       const ins1 = await supabaseClient.from("snapshots_public").insert(publicRows);
-      if (ins1.error) return alert("public保存失敗: " + ins1.error.message);
+      if (ins1.error) {
+        document.getElementById("writeLog").textContent += "public INSERT ERROR:\n" + ins1.error.message;
+        diag("public INSERT ERROR: " + ins1.error.message);
+        return;
+      }
 
-      // 次にprivate
       const ins2 = await supabaseClient.from("snapshots_private").insert(privateRows);
-      if (ins2.error) return alert("private保存失敗: " + ins2.error.message);
+      if (ins2.error) {
+        document.getElementById("writeLog").textContent += "private INSERT ERROR:\n" + ins2.error.message;
+        diag("private INSERT ERROR: " + ins2.error.message);
+        return;
+      }
 
-      alert(`保存完了：${parsed.length}行`);
-      await loadPublic(); // 保存後にグラフ更新
+      document.getElementById("writeLog").textContent += `保存完了：${parsed.length}行`;
+      diag("INSERT OK rows=" + parsed.length);
     });
 
     /**********************************************************************
-     * 起動処理
+     * 起動
      **********************************************************************/
     (async () => {
-      await initAuthCallback();
-      await refreshAuthStatus();
-      await loadPublic();
+      try {
+        await initAuthCallback();
+      } catch (e) {
+        diag("initAuthCallback exception: " + e.message);
+      }
+      await showSession();
     })();
   </script>
 </body>
 </html>
+
