@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>イベント分析</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 16px; max-width: 980px; margin: 0 auto; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+    input { padding: 8px; min-width: 260px; }
+    button { padding: 8px 12px; cursor: pointer; }
+    canvas { margin-top: 16px; }
+    pre { background:#f6f6f6; padding:12px; overflow:auto; }
+  </style>
+</head>
+<body>
+  <h1>イベント分析（公開版：順位なし）</h1>
+
+  <div class="row">
+    <label>event_id：</label>
+    <input id="eventId" value="BA-2026-02" />
+    <button id="loadBtn">読み込む</button>
+  </div>
+
+  <canvas id="participantsChart" height="120"></canvas>
+  <canvas id="difficultyChart" height="120"></canvas>
+
+  <h3>取得データ（先頭3件）</h3>
+  <pre id="debug"></pre>
+
+  <script>
+    // ★ここを書き換え
+    const PROJECT_URL = "https://lfvxfvcijdtnpuhrlnqj.supabase.co";
+    const PUBLISHABLE_KEY = "sb_publishable_3oNlDsSU06CHAJkhrJ9Tvg_4WmLAZ6o";
+
+    let chart1 = null;
+    let chart2 = null;
+
+    async function fetchSnapshots(eventId) {
+      // event_idで絞る（公開ページ用）
+      const url = `${PROJECT_URL}/rest/v1/snapshots_public?select=captured_at,participants,lunatic,torment,insane,extreme,hardcore,veryhard,hard,normal&event_id=eq.${encodeURIComponent(eventId)}&order=captured_at.asc`;
+
+      const res = await fetch(url, {
+        headers: {
+          apikey: PUBLISHABLE_KEY,
+          // Supabase環境によってはAuthorizationも要求されることがあるので両方入れておく
+          Authorization: `Bearer ${PUBLISHABLE_KEY}`,
+        }
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`HTTP ${res.status}: ${text}`);
+      }
+      return await res.json();
+    }
+
+    function renderCharts(rows) {
+      const labels = rows.map(r => new Date(r.captured_at).toLocaleString());
+      const participants = rows.map(r => r.participants);
+
+      // 参加人数推移
+      const ctx1 = document.getElementById("participantsChart");
+      if (chart1) chart1.destroy();
+      chart1 = new Chart(ctx1, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [{ label: "参加人数", data: participants }]
+        },
+        options: { responsive: true }
+      });
+
+      // 難易度別人数（複数線）
+      const ctx2 = document.getElementById("difficultyChart");
+      if (chart2) chart2.destroy();
+      chart2 = new Chart(ctx2, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [
+            { label: "Lunatic", data: rows.map(r => r.lunatic) },
+            { label: "Torment", data: rows.map(r => r.torment) },
+            { label: "Insane",  data: rows.map(r => r.insane) },
+            { label: "Extreme", data: rows.map(r => r.extreme) },
+            { label: "Hardcore",data: rows.map(r => r.hardcore) },
+            { label: "Veryhard",data: rows.map(r => r.veryhard) },
+            { label: "Hard",    data: rows.map(r => r.hard) },
+            { label: "Normal",  data: rows.map(r => r.normal) }
+          ]
+        },
+        options: { responsive: true }
+      });
+    }
+
+    async function load() {
+      const eventId = document.getElementById("eventId").value.trim();
+      if (!eventId) return;
+
+      document.getElementById("debug").textContent = "読み込み中…";
+      try {
+        const rows = await fetchSnapshots(eventId);
+        document.getElementById("debug").textContent = JSON.stringify(rows.slice(0, 3), null, 2);
+        renderCharts(rows);
+      } catch (e) {
+        document.getElementById("debug").textContent = String(e);
+      }
+    }
+
+    document.getElementById("loadBtn").addEventListener("click", load);
+    // 初回自動ロード
+    load();
+  </script>
+</body>
+</html>
