@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>イベント分析（グラフ強制表示版 / FIX）</title>
+  <title>イベント分析（グラフ強制表示版 / TZ FIX）</title>
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -28,8 +28,9 @@
     .ok { color: #0a7; font-weight: 700; }
     .ng { color: #c00; font-weight: 700; }
 
-    /* ★ここが本命：チャート領域の高さを固定して潰れを防ぐ */
+    /* ★チャート領域の高さ固定（潰れ防止） */
     .chartWrap {
+      position: relative;
       height: 360px;
       border: 1px solid #eee;
       border-radius: 10px;
@@ -38,6 +39,8 @@
       margin: 10px 0;
     }
     .chartWrap canvas {
+      position: relative;
+      z-index: 1;
       width: 100% !important;
       height: 100% !important;
       display: block;
@@ -46,10 +49,10 @@
 </head>
 
 <body>
-  <h1>イベント分析（グラフ強制表示版 / FIX）</h1>
+  <h1>イベント分析（グラフ強制表示版 / TZ FIX）</h1>
   <p class="small">
-    「軸や枠は出るのに線が出ない」＝ほぼ確で <b>x/y が無効（Invalid / NaN）</b>。<br>
-    この版は <b>型を強制</b>して絶対に線を出す（そしてログで原因も出す）。
+    横軸が「今日〜明日」になる＝<b>有効点0</b>扱いで time 軸が今を基準に作られてるだけ。<br>
+    この版は <b>captured_at をUTCとして強制パース</b>し、<b>表示はAsia/Tokyo固定</b>して確実に直す。
   </p>
 
   <div class="card">
@@ -61,7 +64,9 @@
     </div>
 
     <div class="small">
-      Chart.js: <span id="chartVer"></span> / Luxon: <span id="luxonVer"></span> / Adapter: <span id="adapterOk"></span>
+      Chart.js: <span id="chartVer"></span> /
+      Luxon: <span id="luxonVer"></span> /
+      Adapter: <span id="adapterOk"></span>
     </div>
 
     <div class="chartWrap">
@@ -120,7 +125,7 @@
 
     document.getElementById("chartVer").textContent = (window.Chart && Chart.version) ? Chart.version : "NOT LOADED";
     document.getElementById("luxonVer").textContent = (window.luxon && luxon.VERSION) ? luxon.VERSION : "NOT LOADED";
-    document.getElementById("adapterOk").textContent = "OK（time軸使用）";
+    document.getElementById("adapterOk").textContent = "OK（Luxon time軸）";
 
     /**********************************************************************
      * Auth callback
@@ -208,15 +213,21 @@
     }
 
     /**********************************************************************
-     * グラフ描画（FIX：型を強制して線が出ない問題を潰す）
+     * グラフ描画（TZ FIX：UTC強制パース + JST表示固定 + validPointsログ）
      **********************************************************************/
     let chart1 = null, chart2 = null;
 
-    function toMs(x) {
-      // captured_at が ISO文字列でも Dateでも吸えるようにする
-      const d = (x instanceof Date) ? x : new Date(String(x));
-      const t = d.getTime();
-      return Number.isFinite(t) ? t : null;
+    // captured_at（例: "2026-02-18T10:32:30"）を「UTCの時刻」として解釈してmsにする
+    function toMsUTC(x) {
+      const s = String(x).trim();
+
+      // まず「ISOをUTCとして解釈」
+      let dt = luxon.DateTime.fromISO(s, { zone: "utc" });
+
+      // ダメならZ付与でフォールバック
+      if (!dt.isValid) dt = luxon.DateTime.fromISO(s + "Z");
+
+      return dt.isValid ? dt.toMillis() : null;
     }
 
     function toNum(y) {
@@ -233,41 +244,44 @@
         return;
       }
 
-      // ソート
-      rows = [...rows].sort((a, b) => new Date(a.captured_at) - new Date(b.captured_at));
+      // ソート（念のため）
+      rows = [...rows].sort((a, b) => String(a.captured_at).localeCompare(String(b.captured_at)));
 
-      // 先頭行と型をログに出す（原因特定用）
-      try {
-        logDraw("firstRow:");
-        logDraw(JSON.stringify(rows[0], null, 2));
-        const typeProbe = rows.slice(0, 3).map(r => ({
-          captured_at: r.captured_at,
-          participants: r.participants,
-          participants_type: typeof r.participants
-        }));
-        logDraw("typeProbe:");
-        logDraw(JSON.stringify(typeProbe, null, 2));
-      } catch (e) {
-        logDraw("logProbe ERROR: " + e.message);
+      // 先頭のパース確認ログ（重要）
+      const raw0 = rows[0].captured_at;
+      logDraw("raw captured_at head: " + raw0);
+      logDraw("new Date(raw)      : " + new Date(String(raw0)).toString());
+      logDraw("as UTC(ms)         : " + new Date(toMsUTC(raw0)).toString());
+
+      // xのmin/max確認（これで横軸の異常が即確定する）
+      const xsAll = rows.map(r => toMsUTC(r.captured_at)).filter(v => v !== null);
+      logDraw("xMillis count: " + xsAll.length);
+      if (xsAll.length) {
+        const minX = Math.min(...xsAll);
+        const maxX = Math.max(...xsAll);
+        logDraw("xMin date: " + new Date(minX).toString());
+        logDraw("xMax date: " + new Date(maxX).toString());
       }
 
-      // ★ここが重要：x=ms数値 / y=数値 に強制
+      // 有効点の生成（x=ms数値, y=数値）
       const seriesXY = (key) => {
-        const pts = rows.map(r => ({ x: toMs(r.captured_at), y: toNum(r[key]) }))
+        const pts = rows.map(r => ({ x: toMsUTC(r.captured_at), y: toNum(r[key]) }))
                         .filter(p => p.x !== null && p.y !== null);
-        logDraw(`series "${key}" validPoints: ${pts.length} / ${rows.length}`);
-        if (pts.length > 0) {
-          logDraw(`series "${key}" head: ` + JSON.stringify(pts.slice(0, 2)));
-        }
+        logDraw(`series "${key}" validPoints: ${pts.length}/${rows.length}`);
+        if (pts.length) logDraw(`series "${key}" head: ` + JSON.stringify(pts.slice(0, 2)));
         return pts;
       };
 
       const commonOptions = {
         responsive: true,
-        maintainAspectRatio: false, // ★wrapの高さに追従
-        // ★parsing:false は外す（文字列/型ブレで死ぬ原因になりがち）
-        // parsing: false,
+        maintainAspectRatio: false,
         normalized: true,
+
+        // ★表示はJST固定（見る人のPC設定に依存させない）
+        adapters: {
+          date: { zone: "Asia/Tokyo" }
+        },
+
         scales: {
           x: {
             type: "time",
@@ -277,8 +291,13 @@
             }
           }
         },
+
         plugins: {
-          legend: { display: true }
+          legend: {
+            display: true
+            // もし誤クリックで消すのがうざいなら↓で無効化
+            // , onClick: () => {}
+          }
         }
       };
 
@@ -291,8 +310,9 @@
           datasets: [{
             label: "参加人数",
             data: seriesXY("participants"),
-            pointRadius: 2,   // ★1点しかなくても見える
-            pointHitRadius: 8,
+            borderWidth: 3,
+            pointRadius: 2,
+            pointHitRadius: 10,
             spanGaps: true
           }]
         },
@@ -307,21 +327,21 @@
         type: "line",
         data: {
           datasets: [
-            { label: "Lunatic",  data: seriesXY("lunatic"),  pointRadius: 0, spanGaps: true },
-            { label: "Torment",  data: seriesXY("torment"),  pointRadius: 0, spanGaps: true },
-            { label: "Insane",   data: seriesXY("insane"),   pointRadius: 0, spanGaps: true },
-            { label: "Extreme",  data: seriesXY("extreme"),  pointRadius: 0, spanGaps: true },
-            { label: "Hardcore", data: seriesXY("hardcore"), pointRadius: 0, spanGaps: true },
-            { label: "Veryhard", data: seriesXY("veryhard"), pointRadius: 0, spanGaps: true },
-            { label: "Hard",     data: seriesXY("hard"),     pointRadius: 0, spanGaps: true },
-            { label: "Normal",   data: seriesXY("normal"),   pointRadius: 0, spanGaps: true }
+            { label: "Lunatic",  data: seriesXY("lunatic"),  borderWidth: 2, pointRadius: 0, spanGaps: true },
+            { label: "Torment",  data: seriesXY("torment"),  borderWidth: 2, pointRadius: 0, spanGaps: true },
+            { label: "Insane",   data: seriesXY("insane"),   borderWidth: 2, pointRadius: 0, spanGaps: true },
+            { label: "Extreme",  data: seriesXY("extreme"),  borderWidth: 2, pointRadius: 0, spanGaps: true },
+            { label: "Hardcore", data: seriesXY("hardcore"), borderWidth: 2, pointRadius: 0, spanGaps: true },
+            { label: "Veryhard", data: seriesXY("veryhard"), borderWidth: 2, pointRadius: 0, spanGaps: true },
+            { label: "Hard",     data: seriesXY("hard"),     borderWidth: 2, pointRadius: 0, spanGaps: true },
+            { label: "Normal",   data: seriesXY("normal"),   borderWidth: 2, pointRadius: 0, spanGaps: true }
           ]
         },
         options: commonOptions
       });
       logDraw("difficultyChart: OK");
 
-      // “本当に描画されてる”証拠（canvasの中身が取れるか）
+      // “本当に描画されてる”証拠
       try {
         const sig1 = ctx1.toDataURL().slice(0, 50);
         const sig2 = ctx2.toDataURL().slice(0, 50);
@@ -372,6 +392,9 @@
         if (looksDate && looksTime) { dtStr = `${cols[0]} ${cols[1]}`; offset = 1; }
         else { dtStr = cols[0]; offset = 0; }
 
+        // ここは「あなたが貼るログ＝JSTのローカル時刻」前提で扱う
+        // ISOにするときにZを付けない（＝ローカルとして保持）ほうが自然だが、
+        // 保存後の表示はUTCで来るので、DB側でtimestamptz推奨。
         const captured = new Date(dtStr.replace(/\//g, "-"));
         if (Number.isNaN(captured.getTime())) continue;
 
@@ -389,7 +412,7 @@
         if (![my_rank,lunatic,torment,insane,extreme,hardcore,veryhard,hard,normal,participants].every(n => Number.isFinite(n))) continue;
 
         out.push({
-          captured_at: captured.toISOString(),
+          captured_at: captured.toISOString(), // ここはUTC化される（JSのtoISOString仕様）
           my_rank, lunatic, torment, insane, extreme, hardcore, veryhard, hard, normal, participants
         });
       }
