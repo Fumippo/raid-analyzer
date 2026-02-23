@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>イベント分析（公開閲覧）</title>
+  <title>イベント分析（管理者 / admin）</title>
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -12,18 +12,28 @@
   <script src="https://cdn.jsdelivr.net/npm/luxon@3.5.0/build/global/luxon.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
 
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <style>
     body { font-family: system-ui, sans-serif; padding: 16px; max-width: 1100px; margin: 0 auto; }
-    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
-    input { padding: 8px; min-width: 260px; }
-    button { padding: 8px 12px; cursor: pointer; }
-    .card { border: 1px solid #ddd; border-radius: 10px; padding: 12px; margin: 12px 0; }
-    pre { background:#f6f6f6; padding:12px; overflow:auto; border-radius: 10px; }
-    .small { color:#666; font-size: 13px; margin: 6px 0; }
+    .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin:8px 0; }
+    input, textarea { padding:8px; }
+    input { min-width: 260px; }
+    textarea { width:100%; min-height:220px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    button { padding:8px 12px; cursor:pointer; }
+    .card { border:1px solid #ddd; border-radius:10px; padding:12px; margin:12px 0; }
+    pre { background:#f6f6f6; padding:12px; overflow:auto; border-radius:10px; }
+    .small { color:#666; font-size:13px; margin:6px 0; }
+    .ok { color:#0a7; font-weight:800; }
+    .ng { color:#c00; font-weight:800; }
+    .muted { color:#777; }
+    .danger { color:#c00; font-weight:900; }
+    .hidden { display:none; }
 
     .chartWrap {
       position: relative;
-      height: 360px;
+      height: 320px;
       border: 1px solid #eee;
       border-radius: 10px;
       background: #fff;
@@ -41,24 +51,59 @@
 </head>
 
 <body>
-  <h1>イベント分析（公開閲覧）</h1>
+  <h1>イベント分析（管理者 / admin）</h1>
   <p class="small">
-    このページは <b>閲覧専用</b>。ログイン欄・保存機能は排除。<br>
-    横軸は captured_at をUTCとして解釈し、表示は Asia/Tokyo 固定。
+    ここは<b>管理者専用</b>。公開ページ(index.html)からログイン欄は消して、編集はここに隔離。<br>
+    管理者判定は <b>UUID（ADMIN_UID）</b> でやる。メールはコードに埋めない（個人情報出さない）。
   </p>
 
   <div class="card">
-    <h2>公開データ読み込み</h2>
-    <div class="row">
-      <label>event_id：</label>
-      <input id="eventId" value="BA-2026-02" />
-      <button id="loadBtn">読み込む</button>
-    </div>
-
+    <h2>0) 状態</h2>
     <div class="small">
       Chart.js: <span id="chartVer"></span> / Luxon: <span id="luxonVer"></span>
     </div>
+    <div class="small">
+      管理者UID設定: <span id="uidState"></span>
+    </div>
+    <div class="small danger" id="uidWarn"></div>
+  </div>
 
+  <div class="card">
+    <h2>1) ログイン（管理者のみ）</h2>
+    <div class="row">
+      <input id="email" placeholder="あなたのメールアドレス" />
+      <button id="loginBtn">ログインリンク送信</button>
+      <button id="sessionBtn">セッション確認</button>
+      <button id="logoutBtn">ログアウト</button>
+    </div>
+    <div class="small muted">
+      ※ 他人がここにメールを入れても、受信箱がない限りログイン不能。<br>
+      ※ ただし嫌がらせOTP送信の入口になるから、公開ページに置かないのが正解。
+    </div>
+    <pre id="authLog"></pre>
+  </div>
+
+  <div class="card hidden" id="adminArea">
+    <h2>2) 入力（コピペ→プレビュー→保存）</h2>
+
+    <div class="row">
+      <label>event_id：</label>
+      <input id="eventId" value="BA-2026-02" />
+      <button id="loadBtn">公開データ再読込（確認）</button>
+    </div>
+
+    <textarea id="paste" placeholder="ログをコピペ（タブ区切り推奨）"></textarea>
+
+    <div class="row">
+      <button id="previewBtn">プレビュー</button>
+      <button id="saveBtn">保存（DBへ）</button>
+      <span id="previewStatus"></span>
+    </div>
+
+    <pre id="previewOut"></pre>
+    <pre id="writeLog"></pre>
+
+    <h3>確認用グラフ（公開データ）</h3>
     <div class="chartWrap"><canvas id="participantsChart"></canvas></div>
     <div class="chartWrap"><canvas id="difficultyChart"></canvas></div>
 
@@ -70,17 +115,149 @@
   </div>
 
   <script>
+    /**********************************************************************
+     * ★必須設定（ここだけ編集）
+     **********************************************************************/
     const PROJECT_URL = "https://lfvxfvcijdtnpuhrlnqj.supabase.co";
     const PUBLISHABLE_KEY = "sb_publishable_3oNlDsSU06CHAJkhrJ9Tvg_4WmLAZ6o";
 
+    // ★あなたの Supabase user UUID（Authentication → Users → ID）
+    // 例: "84d54d8f-a761-4278-a863-7b0937546609"
+    const ADMIN_UID = "PUT_YOUR_ADMIN_UID_HERE";
+
+    // OAuth/OTPの戻り先（このadmin.html自身へ戻す）
+    const ADMIN_REDIRECT_URL = window.location.origin + window.location.pathname;
+
+    /**********************************************************************
+     * 初期化
+     **********************************************************************/
+    const supabaseClient = supabase.createClient(PROJECT_URL, PUBLISHABLE_KEY);
+
+    const authLogEl = document.getElementById("authLog");
     const readLogEl = document.getElementById("readLog");
     const drawLogEl = document.getElementById("drawLog");
+    const writeLogEl = document.getElementById("writeLog");
+    const adminAreaEl = document.getElementById("adminArea");
+    const saveBtnEl = document.getElementById("saveBtn");
+
+    const logAuth = (s) => authLogEl.textContent = (authLogEl.textContent ? authLogEl.textContent + "\n" : "") + s;
     const logRead = (s) => readLogEl.textContent += s + "\n";
     const logDraw = (s) => drawLogEl.textContent += s + "\n";
 
     document.getElementById("chartVer").textContent = (window.Chart && Chart.version) ? Chart.version : "NOT LOADED";
     document.getElementById("luxonVer").textContent = (window.luxon && luxon.VERSION) ? luxon.VERSION : "NOT LOADED";
 
+    // ADMIN_UID 設定チェック
+    (function checkAdminUid() {
+      const uidStateEl = document.getElementById("uidState");
+      const warnEl = document.getElementById("uidWarn");
+      const looksUnset = !ADMIN_UID || ADMIN_UID === "PUT_YOUR_ADMIN_UID_HERE" || ADMIN_UID.length < 20;
+
+      if (looksUnset) {
+        uidStateEl.textContent = "未設定";
+        uidStateEl.className = "ng";
+        warnEl.textContent = "ADMIN_UID が未設定。Authentication → Users の ID を貼れ。未設定のままだと誰も管理者になれない。";
+        saveBtnEl.disabled = true;
+      } else {
+        uidStateEl.textContent = "設定済み";
+        uidStateEl.className = "ok";
+        warnEl.textContent = "";
+      }
+    })();
+
+    /**********************************************************************
+     * Auth callback: ?code=... をセッションに交換
+     **********************************************************************/
+    async function initAuthCallback() {
+      const url = new URL(window.location.href);
+      const code = url.searchParams.get("code");
+      if (!code) return;
+
+      const { error } = await supabaseClient.auth.exchangeCodeForSession(code);
+      if (error) {
+        authLogEl.textContent = "AuthCallback ERROR: " + error.message;
+        return;
+      }
+
+      // URLからcodeを消す
+      url.searchParams.delete("code");
+      window.history.replaceState({}, document.title, url.toString());
+    }
+
+    /**********************************************************************
+     * 管理者判定（UUID一致のみ）
+     **********************************************************************/
+    async function enforceAdminOnly() {
+      const { data, error } = await supabaseClient.auth.getSession();
+      if (error) {
+        authLogEl.textContent = "getSession ERROR: " + error.message;
+        adminAreaEl.classList.add("hidden");
+        return false;
+      }
+
+      const user = data.session?.user;
+      if (!user) {
+        authLogEl.textContent = "未ログイン（管理者のみ）。";
+        adminAreaEl.classList.add("hidden");
+        return false;
+      }
+
+      // ADMIN_UIDが未設定なら強制的に閉じる
+      if (!ADMIN_UID || ADMIN_UID === "PUT_YOUR_ADMIN_UID_HERE") {
+        authLogEl.textContent = "ADMIN_UID が未設定。管理者判定できないので機能停止。";
+        adminAreaEl.classList.add("hidden");
+        return false;
+      }
+
+      if (user.id !== ADMIN_UID) {
+        await supabaseClient.auth.signOut();
+        authLogEl.textContent =
+          "管理者ではないのでログアウトしました。\n" +
+          "login uid: " + user.id;
+        adminAreaEl.classList.add("hidden");
+        return false;
+      }
+
+      authLogEl.textContent =
+        "管理者ログイン中\n" +
+        "email: " + (user.email ?? "(unknown)") + "\n" +
+        "uid: " + user.id;
+
+      adminAreaEl.classList.remove("hidden");
+      saveBtnEl.disabled = false;
+      return true;
+    }
+
+    /**********************************************************************
+     * ログインリンク送信（メールは埋め込まない）
+     **********************************************************************/
+    document.getElementById("loginBtn").addEventListener("click", async () => {
+      authLogEl.textContent = "";
+
+      const email = document.getElementById("email").value.trim();
+      if (!email) return alert("メールアドレスを入れて");
+
+      const { error } = await supabaseClient.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: ADMIN_REDIRECT_URL }
+      });
+
+      authLogEl.textContent = error
+        ? "OTP送信ERROR: " + error.message
+        : "送信OK。メールのリンクを踏め（踏めるのは受信箱の持ち主だけ）。";
+    });
+
+    document.getElementById("sessionBtn").addEventListener("click", enforceAdminOnly);
+    document.getElementById("logoutBtn").addEventListener("click", async () => {
+      await supabaseClient.auth.signOut();
+      await enforceAdminOnly();
+    });
+
+    supabaseClient.auth.onAuthStateChange(() => enforceAdminOnly());
+
+    /**********************************************************************
+     * 公開データ読み取り（確認用）
+     **********************************************************************/
     function makeLoadUrl(eventId) {
       return `${PROJECT_URL}/rest/v1/snapshots_public` +
         `?select=captured_at,participants,lunatic,torment,insane,extreme,hardcore,veryhard,hard,normal` +
@@ -112,7 +289,11 @@
       return text ? JSON.parse(text) : [];
     }
 
-    // captured_at（"2026-02-18T10:32:30"）を「UTC」として解釈してms化
+    /**********************************************************************
+     * グラフ描画（JST表示固定 + captured_at をUTCとして解釈）
+     **********************************************************************/
+    let chart1 = null, chart2 = null;
+
     function toMsUTC(x) {
       const s = String(x).trim();
       let dt = luxon.DateTime.fromISO(s, { zone: "utc" });
@@ -123,8 +304,6 @@
       const n = Number(y);
       return Number.isFinite(n) ? n : null;
     }
-
-    let chart1 = null, chart2 = null;
 
     function renderCharts(rows) {
       drawLogEl.textContent = "";
@@ -198,9 +377,142 @@
         logDraw("loadPublic ERROR: " + e.message);
       }
     }
-
     document.getElementById("loadBtn").addEventListener("click", loadPublic);
-    loadPublic();
+
+    /**********************************************************************
+     * パース＋保存
+     * ※RLSが「owner = auth.uid()」で縛れてないと話にならない（最重要）
+     **********************************************************************/
+    function splitLine(line) {
+      if (line.includes("\t")) return line.split("\t");
+      return line.trim().split(/\s+/);
+    }
+
+    function parsePasted(text) {
+      const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      if (lines.length === 0) return [];
+
+      const isHeader = (s) => s.includes("自分の順位") || s.includes("参加人数");
+      let startIdx = isHeader(lines[0]) ? 1 : 0;
+
+      const out = [];
+      for (let i = startIdx; i < lines.length; i++) {
+        const cols = splitLine(lines[i]);
+        if (cols.length < 11) continue;
+
+        const looksDate = /^\d{4}\/\d{1,2}\/\d{1,2}$/.test(cols[0]) || /^\d{4}-\d{1,2}-\d{1,2}$/.test(cols[0]);
+        const looksTime = /^\d{1,2}:\d{2}:\d{2}$/.test(cols[1] ?? "");
+        let dtStr, offset = 0;
+        if (looksDate && looksTime) { dtStr = `${cols[0]} ${cols[1]}`; offset = 1; }
+        else { dtStr = cols[0]; offset = 0; }
+
+        const captured = new Date(dtStr.replace(/\//g, "-"));
+        if (Number.isNaN(captured.getTime())) continue;
+
+        const my_rank = Number(cols[1+offset]);
+        const lunatic = Number(cols[2+offset]);
+        const torment = Number(cols[3+offset]);
+        const insane  = Number(cols[4+offset]);
+        const extreme = Number(cols[5+offset]);
+        const hardcore= Number(cols[6+offset]);
+        const veryhard= Number(cols[7+offset]);
+        const hard    = Number(cols[8+offset]);
+        const normal  = Number(cols[9+offset]);
+        const participants = Number(cols[10+offset]);
+
+        if (![my_rank,lunatic,torment,insane,extreme,hardcore,veryhard,hard,normal,participants].every(n => Number.isFinite(n))) continue;
+
+        out.push({
+          captured_at: captured.toISOString(),
+          my_rank, lunatic, torment, insane, extreme, hardcore, veryhard, hard, normal, participants
+        });
+      }
+      return out;
+    }
+
+    function showPreview(parsed) {
+      document.getElementById("previewOut").textContent = JSON.stringify(parsed.slice(0,3), null, 2);
+      const s = document.getElementById("previewStatus");
+      s.textContent = `読み取り ${parsed.length} 行`;
+      s.className = parsed.length ? "ok" : "ng";
+    }
+
+    document.getElementById("previewBtn").addEventListener("click", () => {
+      showPreview(parsePasted(document.getElementById("paste").value));
+    });
+
+    document.getElementById("saveBtn").addEventListener("click", async () => {
+      writeLogEl.textContent = "";
+
+      const ok = await enforceAdminOnly();
+      if (!ok) {
+        writeLogEl.textContent = "管理者としてログインしてから出直せ。";
+        return;
+      }
+
+      const eventId = document.getElementById("eventId").value.trim();
+      if (!eventId) return alert("event_id が空");
+
+      const { data } = await supabaseClient.auth.getSession();
+      const user = data.session?.user;
+      if (!user) {
+        writeLogEl.textContent = "未ログイン。";
+        return;
+      }
+
+      const parsed = parsePasted(document.getElementById("paste").value);
+      showPreview(parsed);
+      if (parsed.length === 0) {
+        writeLogEl.textContent = "取り込める行が0。";
+        return;
+      }
+
+      const publicRows = parsed.map(r => ({
+        event_id: eventId,
+        captured_at: r.captured_at,
+        participants: r.participants,
+        lunatic: r.lunatic,
+        torment: r.torment,
+        insane: r.insane,
+        extreme: r.extreme,
+        hardcore: r.hardcore,
+        veryhard: r.veryhard,
+        hard: r.hard,
+        normal: r.normal,
+        owner: user.id
+      }));
+
+      const privateRows = parsed.map(r => ({
+        event_id: eventId,
+        captured_at: r.captured_at,
+        my_rank: r.my_rank,
+        owner: user.id
+      }));
+
+      writeLogEl.textContent = "保存中…";
+
+      // public
+      const ins1 = await supabaseClient.from("snapshots_public").insert(publicRows);
+      if (ins1.error) { writeLogEl.textContent = "public保存失敗: " + ins1.error.message; return; }
+
+      // private
+      const ins2 = await supabaseClient.from("snapshots_private").insert(privateRows);
+      if (ins2.error) { writeLogEl.textContent = "private保存失敗: " + ins2.error.message; return; }
+
+      writeLogEl.textContent = `保存完了：${parsed.length}行`;
+      await loadPublic();
+    });
+
+    /**********************************************************************
+     * 起動
+     **********************************************************************/
+    (async () => {
+      await initAuthCallback();
+      await enforceAdminOnly();
+      if (!adminAreaEl.classList.contains("hidden")) {
+        await loadPublic();
+      }
+    })();
   </script>
 </body>
 </html>
