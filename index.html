@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>イベント分析（グラフ強制表示版 / TZ FIX）</title>
+  <title>イベント分析（公開閲覧）</title>
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -12,23 +12,15 @@
   <script src="https://cdn.jsdelivr.net/npm/luxon@3.5.0/build/global/luxon.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
 
-  <!-- Supabase -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
   <style>
     body { font-family: system-ui, sans-serif; padding: 16px; max-width: 1100px; margin: 0 auto; }
     .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
-    input, textarea { padding: 8px; }
-    input { min-width: 260px; }
-    textarea { width: 100%; min-height: 220px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    input { padding: 8px; min-width: 260px; }
     button { padding: 8px 12px; cursor: pointer; }
     .card { border: 1px solid #ddd; border-radius: 10px; padding: 12px; margin: 12px 0; }
     pre { background:#f6f6f6; padding:12px; overflow:auto; border-radius: 10px; }
     .small { color:#666; font-size: 13px; margin: 6px 0; }
-    .ok { color: #0a7; font-weight: 700; }
-    .ng { color: #c00; font-weight: 700; }
 
-    /* ★チャート領域の高さ固定（潰れ防止） */
     .chartWrap {
       position: relative;
       height: 360px;
@@ -49,14 +41,14 @@
 </head>
 
 <body>
-  <h1>イベント分析（グラフ強制表示版 / TZ FIX）</h1>
+  <h1>イベント分析（公開閲覧）</h1>
   <p class="small">
-    横軸が「今日〜明日」になる＝<b>有効点0</b>扱いで time 軸が今を基準に作られてるだけ。<br>
-    この版は <b>captured_at をUTCとして強制パース</b>し、<b>表示はAsia/Tokyo固定</b>して確実に直す。
+    このページは <b>閲覧専用</b>。ログイン欄・保存機能は排除。<br>
+    横軸は captured_at をUTCとして解釈し、表示は Asia/Tokyo 固定。
   </p>
 
   <div class="card">
-    <h2>① 公開データ読み込み</h2>
+    <h2>公開データ読み込み</h2>
     <div class="row">
       <label>event_id：</label>
       <input id="eventId" value="BA-2026-02" />
@@ -64,18 +56,11 @@
     </div>
 
     <div class="small">
-      Chart.js: <span id="chartVer"></span> /
-      Luxon: <span id="luxonVer"></span> /
-      Adapter: <span id="adapterOk"></span>
+      Chart.js: <span id="chartVer"></span> / Luxon: <span id="luxonVer"></span>
     </div>
 
-    <div class="chartWrap">
-      <canvas id="participantsChart"></canvas>
-    </div>
-
-    <div class="chartWrap">
-      <canvas id="difficultyChart"></canvas>
-    </div>
+    <div class="chartWrap"><canvas id="participantsChart"></canvas></div>
+    <div class="chartWrap"><canvas id="difficultyChart"></canvas></div>
 
     <h3>取得ログ</h3>
     <pre id="readLog"></pre>
@@ -84,103 +69,18 @@
     <pre id="drawLog"></pre>
   </div>
 
-  <div class="card">
-    <h2>② ログイン（自分だけ投稿）</h2>
-    <div class="row">
-      <input id="email" placeholder="自分のメールアドレス" />
-      <button id="loginBtn">ログインリンク送信</button>
-      <button id="sessionBtn">セッション確認</button>
-      <button id="logoutBtn">ログアウト</button>
-    </div>
-    <pre id="authLog"></pre>
-  </div>
-
-  <div class="card">
-    <h2>③ 入力（コピペ→プレビュー→保存）</h2>
-    <textarea id="paste" placeholder="ログをコピペ（タブ区切り推奨）"></textarea>
-    <div class="row">
-      <button id="previewBtn">プレビュー</button>
-      <button id="saveBtn">保存（DBへ）</button>
-      <span id="previewStatus"></span>
-    </div>
-    <pre id="previewOut"></pre>
-    <pre id="writeLog"></pre>
-  </div>
-
   <script>
-    /**********************************************************************
-     * 設定
-     **********************************************************************/
     const PROJECT_URL = "https://lfvxfvcijdtnpuhrlnqj.supabase.co";
     const PUBLISHABLE_KEY = "sb_publishable_3oNlDsSU06CHAJkhrJ9Tvg_4WmLAZ6o";
-    const SITE_URL = "https://fumippo.github.io/raid-analyzer/";
-
-    const supabaseClient = supabase.createClient(PROJECT_URL, PUBLISHABLE_KEY);
 
     const readLogEl = document.getElementById("readLog");
     const drawLogEl = document.getElementById("drawLog");
-
     const logRead = (s) => readLogEl.textContent += s + "\n";
     const logDraw = (s) => drawLogEl.textContent += s + "\n";
 
     document.getElementById("chartVer").textContent = (window.Chart && Chart.version) ? Chart.version : "NOT LOADED";
     document.getElementById("luxonVer").textContent = (window.luxon && luxon.VERSION) ? luxon.VERSION : "NOT LOADED";
-    document.getElementById("adapterOk").textContent = "OK（Luxon time軸）";
 
-    /**********************************************************************
-     * Auth callback
-     **********************************************************************/
-    async function initAuthCallback() {
-      const url = new URL(window.location.href);
-      const code = url.searchParams.get("code");
-      if (!code) return;
-
-      const { error } = await supabaseClient.auth.exchangeCodeForSession(code);
-      if (error) {
-        document.getElementById("authLog").textContent = "AuthCallback ERROR: " + error.message;
-        return;
-      }
-      url.searchParams.delete("code");
-      window.history.replaceState({}, document.title, url.toString());
-    }
-
-    async function showSession() {
-      const { data, error } = await supabaseClient.auth.getSession();
-      if (error) {
-        document.getElementById("authLog").textContent = "getSession ERROR: " + error.message;
-        return;
-      }
-      const session = data.session;
-      document.getElementById("authLog").textContent = session?.user
-        ? `ログイン中\nemail: ${session.user.email}\nuid: ${session.user.id}`
-        : "未ログイン";
-    }
-
-    document.getElementById("loginBtn").addEventListener("click", async () => {
-      const email = document.getElementById("email").value.trim();
-      if (!email) return alert("メールアドレスを入れて");
-
-      const { error } = await supabaseClient.auth.signInWithOtp({
-        email,
-        options: { emailRedirectTo: SITE_URL }
-      });
-
-      document.getElementById("authLog").textContent = error
-        ? "OTP送信ERROR: " + error.message
-        : "送信OK。メールのリンクを踏め。";
-    });
-
-    document.getElementById("sessionBtn").addEventListener("click", showSession);
-    document.getElementById("logoutBtn").addEventListener("click", async () => {
-      await supabaseClient.auth.signOut();
-      await showSession();
-    });
-
-    supabaseClient.auth.onAuthStateChange(() => showSession());
-
-    /**********************************************************************
-     * REST読み取り
-     **********************************************************************/
     function makeLoadUrl(eventId) {
       return `${PROJECT_URL}/rest/v1/snapshots_public` +
         `?select=captured_at,participants,lunatic,torment,insane,extreme,hardcore,veryhard,hard,normal` +
@@ -212,63 +112,29 @@
       return text ? JSON.parse(text) : [];
     }
 
-    /**********************************************************************
-     * グラフ描画（TZ FIX：UTC強制パース + JST表示固定 + validPointsログ）
-     **********************************************************************/
-    let chart1 = null, chart2 = null;
-
-    // captured_at（例: "2026-02-18T10:32:30"）を「UTCの時刻」として解釈してmsにする
+    // captured_at（"2026-02-18T10:32:30"）を「UTC」として解釈してms化
     function toMsUTC(x) {
       const s = String(x).trim();
-
-      // まず「ISOをUTCとして解釈」
       let dt = luxon.DateTime.fromISO(s, { zone: "utc" });
-
-      // ダメならZ付与でフォールバック
       if (!dt.isValid) dt = luxon.DateTime.fromISO(s + "Z");
-
       return dt.isValid ? dt.toMillis() : null;
     }
-
     function toNum(y) {
       const n = Number(y);
       return Number.isFinite(n) ? n : null;
     }
 
+    let chart1 = null, chart2 = null;
+
     function renderCharts(rows) {
       drawLogEl.textContent = "";
       logDraw(`rows: ${rows.length}`);
+      if (!rows.length) { logDraw("データ0件"); return; }
 
-      if (!Array.isArray(rows) || rows.length === 0) {
-        logDraw("データ0件。event_idが違うか、公開テーブルに行が無い。");
-        return;
-      }
-
-      // ソート（念のため）
-      rows = [...rows].sort((a, b) => String(a.captured_at).localeCompare(String(b.captured_at)));
-
-      // 先頭のパース確認ログ（重要）
-      const raw0 = rows[0].captured_at;
-      logDraw("raw captured_at head: " + raw0);
-      logDraw("new Date(raw)      : " + new Date(String(raw0)).toString());
-      logDraw("as UTC(ms)         : " + new Date(toMsUTC(raw0)).toString());
-
-      // xのmin/max確認（これで横軸の異常が即確定する）
-      const xsAll = rows.map(r => toMsUTC(r.captured_at)).filter(v => v !== null);
-      logDraw("xMillis count: " + xsAll.length);
-      if (xsAll.length) {
-        const minX = Math.min(...xsAll);
-        const maxX = Math.max(...xsAll);
-        logDraw("xMin date: " + new Date(minX).toString());
-        logDraw("xMax date: " + new Date(maxX).toString());
-      }
-
-      // 有効点の生成（x=ms数値, y=数値）
       const seriesXY = (key) => {
         const pts = rows.map(r => ({ x: toMsUTC(r.captured_at), y: toNum(r[key]) }))
                         .filter(p => p.x !== null && p.y !== null);
         logDraw(`series "${key}" validPoints: ${pts.length}/${rows.length}`);
-        if (pts.length) logDraw(`series "${key}" head: ` + JSON.stringify(pts.slice(0, 2)));
         return pts;
       };
 
@@ -276,12 +142,7 @@
         responsive: true,
         maintainAspectRatio: false,
         normalized: true,
-
-        // ★表示はJST固定（見る人のPC設定に依存させない）
-        adapters: {
-          date: { zone: "Asia/Tokyo" }
-        },
-
+        adapters: { date: { zone: "Asia/Tokyo" } },
         scales: {
           x: {
             type: "time",
@@ -290,72 +151,46 @@
               displayFormats: { minute:"LL-dd HH:mm", hour:"LL-dd HH:mm", day:"LL-dd" }
             }
           }
-        },
-
-        plugins: {
-          legend: {
-            display: true
-            // もし誤クリックで消すのがうざいなら↓で無効化
-            // , onClick: () => {}
-          }
         }
       };
 
-      // 参加人数
       const ctx1 = document.getElementById("participantsChart");
       if (chart1) chart1.destroy();
       chart1 = new Chart(ctx1, {
         type: "line",
-        data: {
-          datasets: [{
-            label: "参加人数",
-            data: seriesXY("participants"),
-            borderWidth: 3,
-            pointRadius: 2,
-            pointHitRadius: 10,
-            spanGaps: true
-          }]
-        },
+        data: { datasets: [{
+          label: "参加人数",
+          data: seriesXY("participants"),
+          borderWidth: 3,
+          pointRadius: 2,
+          pointHitRadius: 10
+        }]},
         options: commonOptions
       });
-      logDraw("participantsChart: OK");
 
-      // 難易度別
       const ctx2 = document.getElementById("difficultyChart");
       if (chart2) chart2.destroy();
       chart2 = new Chart(ctx2, {
         type: "line",
-        data: {
-          datasets: [
-            { label: "Lunatic",  data: seriesXY("lunatic"),  borderWidth: 2, pointRadius: 0, spanGaps: true },
-            { label: "Torment",  data: seriesXY("torment"),  borderWidth: 2, pointRadius: 0, spanGaps: true },
-            { label: "Insane",   data: seriesXY("insane"),   borderWidth: 2, pointRadius: 0, spanGaps: true },
-            { label: "Extreme",  data: seriesXY("extreme"),  borderWidth: 2, pointRadius: 0, spanGaps: true },
-            { label: "Hardcore", data: seriesXY("hardcore"), borderWidth: 2, pointRadius: 0, spanGaps: true },
-            { label: "Veryhard", data: seriesXY("veryhard"), borderWidth: 2, pointRadius: 0, spanGaps: true },
-            { label: "Hard",     data: seriesXY("hard"),     borderWidth: 2, pointRadius: 0, spanGaps: true },
-            { label: "Normal",   data: seriesXY("normal"),   borderWidth: 2, pointRadius: 0, spanGaps: true }
-          ]
-        },
+        data: { datasets: [
+          { label: "Lunatic",  data: seriesXY("lunatic"),  borderWidth: 2, pointRadius: 0 },
+          { label: "Torment",  data: seriesXY("torment"),  borderWidth: 2, pointRadius: 0 },
+          { label: "Insane",   data: seriesXY("insane"),   borderWidth: 2, pointRadius: 0 },
+          { label: "Extreme",  data: seriesXY("extreme"),  borderWidth: 2, pointRadius: 0 },
+          { label: "Hardcore", data: seriesXY("hardcore"), borderWidth: 2, pointRadius: 0 },
+          { label: "Veryhard", data: seriesXY("veryhard"), borderWidth: 2, pointRadius: 0 },
+          { label: "Hard",     data: seriesXY("hard"),     borderWidth: 2, pointRadius: 0 },
+          { label: "Normal",   data: seriesXY("normal"),   borderWidth: 2, pointRadius: 0 }
+        ]},
         options: commonOptions
       });
-      logDraw("difficultyChart: OK");
 
-      // “本当に描画されてる”証拠
-      try {
-        const sig1 = ctx1.toDataURL().slice(0, 50);
-        const sig2 = ctx2.toDataURL().slice(0, 50);
-        logDraw("canvasSig participants: " + sig1);
-        logDraw("canvasSig difficulty  : " + sig2);
-      } catch (e) {
-        logDraw("canvasSig ERROR: " + e.message);
-      }
+      logDraw("draw: OK");
     }
 
     async function loadPublic() {
       const eventId = document.getElementById("eventId").value.trim();
       if (!eventId) return alert("event_id が空");
-
       try {
         const rows = await fetchJson(makeLoadUrl(eventId));
         renderCharts(rows);
@@ -365,128 +200,11 @@
     }
 
     document.getElementById("loadBtn").addEventListener("click", loadPublic);
-
-    /**********************************************************************
-     * パース＋保存
-     **********************************************************************/
-    function splitLine(line) {
-      if (line.includes("\t")) return line.split("\t");
-      return line.trim().split(/\s+/);
-    }
-
-    function parsePasted(text) {
-      const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-      if (lines.length === 0) return [];
-
-      const isHeader = (s) => s.includes("自分の順位") || s.includes("参加人数");
-      let startIdx = isHeader(lines[0]) ? 1 : 0;
-
-      const out = [];
-      for (let i = startIdx; i < lines.length; i++) {
-        const cols = splitLine(lines[i]);
-        if (cols.length < 11) continue;
-
-        const looksDate = /^\d{4}\/\d{1,2}\/\d{1,2}$/.test(cols[0]) || /^\d{4}-\d{1,2}-\d{1,2}$/.test(cols[0]);
-        const looksTime = /^\d{1,2}:\d{2}:\d{2}$/.test(cols[1] ?? "");
-        let dtStr, offset = 0;
-        if (looksDate && looksTime) { dtStr = `${cols[0]} ${cols[1]}`; offset = 1; }
-        else { dtStr = cols[0]; offset = 0; }
-
-        // ここは「あなたが貼るログ＝JSTのローカル時刻」前提で扱う
-        // ISOにするときにZを付けない（＝ローカルとして保持）ほうが自然だが、
-        // 保存後の表示はUTCで来るので、DB側でtimestamptz推奨。
-        const captured = new Date(dtStr.replace(/\//g, "-"));
-        if (Number.isNaN(captured.getTime())) continue;
-
-        const my_rank = Number(cols[1+offset]);
-        const lunatic = Number(cols[2+offset]);
-        const torment = Number(cols[3+offset]);
-        const insane  = Number(cols[4+offset]);
-        const extreme = Number(cols[5+offset]);
-        const hardcore= Number(cols[6+offset]);
-        const veryhard= Number(cols[7+offset]);
-        const hard    = Number(cols[8+offset]);
-        const normal  = Number(cols[9+offset]);
-        const participants = Number(cols[10+offset]);
-
-        if (![my_rank,lunatic,torment,insane,extreme,hardcore,veryhard,hard,normal,participants].every(n => Number.isFinite(n))) continue;
-
-        out.push({
-          captured_at: captured.toISOString(), // ここはUTC化される（JSのtoISOString仕様）
-          my_rank, lunatic, torment, insane, extreme, hardcore, veryhard, hard, normal, participants
-        });
-      }
-      return out;
-    }
-
-    function showPreview(parsed) {
-      document.getElementById("previewOut").textContent = JSON.stringify(parsed.slice(0,3), null, 2);
-      const s = document.getElementById("previewStatus");
-      s.textContent = `読み取り ${parsed.length} 行`;
-      s.className = parsed.length ? "ok" : "ng";
-    }
-
-    document.getElementById("previewBtn").addEventListener("click", () => {
-      showPreview(parsePasted(document.getElementById("paste").value));
-    });
-
-    document.getElementById("saveBtn").addEventListener("click", async () => {
-      const eventId = document.getElementById("eventId").value.trim();
-      if (!eventId) return alert("event_id が空");
-
-      const { data } = await supabaseClient.auth.getSession();
-      const user = data.session?.user;
-      if (!user) return document.getElementById("writeLog").textContent = "未ログイン。まずログインして。";
-
-      const parsed = parsePasted(document.getElementById("paste").value);
-      showPreview(parsed);
-      if (parsed.length === 0) return document.getElementById("writeLog").textContent = "取り込める行が0。";
-
-      const publicRows = parsed.map(r => ({
-        event_id: eventId,
-        captured_at: r.captured_at,
-        participants: r.participants,
-        lunatic: r.lunatic,
-        torment: r.torment,
-        insane: r.insane,
-        extreme: r.extreme,
-        hardcore: r.hardcore,
-        veryhard: r.veryhard,
-        hard: r.hard,
-        normal: r.normal,
-        owner: user.id
-      }));
-
-      const privateRows = parsed.map(r => ({
-        event_id: eventId,
-        captured_at: r.captured_at,
-        my_rank: r.my_rank,
-        owner: user.id
-      }));
-
-      document.getElementById("writeLog").textContent = "保存中…";
-
-      const ins1 = await supabaseClient.from("snapshots_public").insert(publicRows);
-      if (ins1.error) return document.getElementById("writeLog").textContent = "public保存失敗: " + ins1.error.message;
-
-      const ins2 = await supabaseClient.from("snapshots_private").insert(privateRows);
-      if (ins2.error) return document.getElementById("writeLog").textContent = "private保存失敗: " + ins2.error.message;
-
-      document.getElementById("writeLog").textContent = `保存完了：${parsed.length}行`;
-      await loadPublic();
-    });
-
-    /**********************************************************************
-     * 起動
-     **********************************************************************/
-    (async () => {
-      await initAuthCallback();
-      await showSession();
-      await loadPublic();
-    })();
+    loadPublic();
   </script>
 </body>
 </html>
+
 
 
 
