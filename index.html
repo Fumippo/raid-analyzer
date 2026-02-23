@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>イベント分析（グラフ強制表示版）</title>
+  <title>イベント分析（グラフ強制表示版 / FIX）</title>
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -39,17 +39,17 @@
     }
     .chartWrap canvas {
       width: 100% !important;
-      height: 100% !important;   /* ←これが効くと“絶対見える” */
+      height: 100% !important;
       display: block;
     }
   </style>
 </head>
 
 <body>
-  <h1>イベント分析（グラフ強制表示版）</h1>
+  <h1>イベント分析（グラフ強制表示版 / FIX）</h1>
   <p class="small">
-    ログ的には描画成功してるのに見えない → 高さ潰れ or キャッシュが99%。<br>
-    これは高さを固定して <b>強制的に見える</b>ようにした版。
+    「軸や枠は出るのに線が出ない」＝ほぼ確で <b>x/y が無効（Invalid / NaN）</b>。<br>
+    この版は <b>型を強制</b>して絶対に線を出す（そしてログで原因も出す）。
   </p>
 
   <div class="card">
@@ -208,9 +208,21 @@
     }
 
     /**********************************************************************
-     * グラフ描画（高さ固定＋アスペクト比固定解除）
+     * グラフ描画（FIX：型を強制して線が出ない問題を潰す）
      **********************************************************************/
     let chart1 = null, chart2 = null;
+
+    function toMs(x) {
+      // captured_at が ISO文字列でも Dateでも吸えるようにする
+      const d = (x instanceof Date) ? x : new Date(String(x));
+      const t = d.getTime();
+      return Number.isFinite(t) ? t : null;
+    }
+
+    function toNum(y) {
+      const n = Number(y);
+      return Number.isFinite(n) ? n : null;
+    }
 
     function renderCharts(rows) {
       drawLogEl.textContent = "";
@@ -221,13 +233,41 @@
         return;
       }
 
+      // ソート
       rows = [...rows].sort((a, b) => new Date(a.captured_at) - new Date(b.captured_at));
-      const seriesXY = (key) => rows.map(r => ({ x: r.captured_at, y: r[key] }));
+
+      // 先頭行と型をログに出す（原因特定用）
+      try {
+        logDraw("firstRow:");
+        logDraw(JSON.stringify(rows[0], null, 2));
+        const typeProbe = rows.slice(0, 3).map(r => ({
+          captured_at: r.captured_at,
+          participants: r.participants,
+          participants_type: typeof r.participants
+        }));
+        logDraw("typeProbe:");
+        logDraw(JSON.stringify(typeProbe, null, 2));
+      } catch (e) {
+        logDraw("logProbe ERROR: " + e.message);
+      }
+
+      // ★ここが重要：x=ms数値 / y=数値 に強制
+      const seriesXY = (key) => {
+        const pts = rows.map(r => ({ x: toMs(r.captured_at), y: toNum(r[key]) }))
+                        .filter(p => p.x !== null && p.y !== null);
+        logDraw(`series "${key}" validPoints: ${pts.length} / ${rows.length}`);
+        if (pts.length > 0) {
+          logDraw(`series "${key}" head: ` + JSON.stringify(pts.slice(0, 2)));
+        }
+        return pts;
+      };
 
       const commonOptions = {
         responsive: true,
-        maintainAspectRatio: false,   // ★これが効く：wrapの高さに追従
-        parsing: false,
+        maintainAspectRatio: false, // ★wrapの高さに追従
+        // ★parsing:false は外す（文字列/型ブレで死ぬ原因になりがち）
+        // parsing: false,
+        normalized: true,
         scales: {
           x: {
             type: "time",
@@ -236,42 +276,55 @@
               displayFormats: { minute:"LL-dd HH:mm", hour:"LL-dd HH:mm", day:"LL-dd" }
             }
           }
+        },
+        plugins: {
+          legend: { display: true }
         }
       };
 
+      // 参加人数
       const ctx1 = document.getElementById("participantsChart");
       if (chart1) chart1.destroy();
       chart1 = new Chart(ctx1, {
         type: "line",
-        data: { datasets: [{ label: "参加人数", data: seriesXY("participants") }] },
+        data: {
+          datasets: [{
+            label: "参加人数",
+            data: seriesXY("participants"),
+            pointRadius: 2,   // ★1点しかなくても見える
+            pointHitRadius: 8,
+            spanGaps: true
+          }]
+        },
         options: commonOptions
       });
       logDraw("participantsChart: OK");
 
+      // 難易度別
       const ctx2 = document.getElementById("difficultyChart");
       if (chart2) chart2.destroy();
       chart2 = new Chart(ctx2, {
         type: "line",
         data: {
           datasets: [
-            { label: "Lunatic",  data: seriesXY("lunatic") },
-            { label: "Torment",  data: seriesXY("torment") },
-            { label: "Insane",   data: seriesXY("insane") },
-            { label: "Extreme",  data: seriesXY("extreme") },
-            { label: "Hardcore", data: seriesXY("hardcore") },
-            { label: "Veryhard", data: seriesXY("veryhard") },
-            { label: "Hard",     data: seriesXY("hard") },
-            { label: "Normal",   data: seriesXY("normal") }
+            { label: "Lunatic",  data: seriesXY("lunatic"),  pointRadius: 0, spanGaps: true },
+            { label: "Torment",  data: seriesXY("torment"),  pointRadius: 0, spanGaps: true },
+            { label: "Insane",   data: seriesXY("insane"),   pointRadius: 0, spanGaps: true },
+            { label: "Extreme",  data: seriesXY("extreme"),  pointRadius: 0, spanGaps: true },
+            { label: "Hardcore", data: seriesXY("hardcore"), pointRadius: 0, spanGaps: true },
+            { label: "Veryhard", data: seriesXY("veryhard"), pointRadius: 0, spanGaps: true },
+            { label: "Hard",     data: seriesXY("hard"),     pointRadius: 0, spanGaps: true },
+            { label: "Normal",   data: seriesXY("normal"),   pointRadius: 0, spanGaps: true }
           ]
         },
         options: commonOptions
       });
       logDraw("difficultyChart: OK");
 
-      // ★“本当に絵が描かれてる”証拠をログに出す
+      // “本当に描画されてる”証拠（canvasの中身が取れるか）
       try {
-        const sig1 = ctx1.toDataURL().slice(0, 40);
-        const sig2 = ctx2.toDataURL().slice(0, 40);
+        const sig1 = ctx1.toDataURL().slice(0, 50);
+        const sig2 = ctx2.toDataURL().slice(0, 50);
         logDraw("canvasSig participants: " + sig1);
         logDraw("canvasSig difficulty  : " + sig2);
       } catch (e) {
@@ -294,7 +347,7 @@
     document.getElementById("loadBtn").addEventListener("click", loadPublic);
 
     /**********************************************************************
-     * パース＋保存（前と同じ）
+     * パース＋保存
      **********************************************************************/
     function splitLine(line) {
       if (line.includes("\t")) return line.split("\t");
