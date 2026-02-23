@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>イベント分析（公開閲覧）</title>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <!-- Luxon + adapter -->
+  <script src="https://cdn.jsdelivr.net/npm/luxon@3.5.0/build/global/luxon.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
+
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 16px; max-width: 1100px; margin: 0 auto; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+    input { padding: 8px; min-width: 260px; }
+    button { padding: 8px 12px; cursor: pointer; }
+    .card { border: 1px solid #ddd; border-radius: 10px; padding: 12px; margin: 12px 0; }
+    pre { background:#f6f6f6; padding:12px; overflow:auto; border-radius: 10px; }
+    .small { color:#666; font-size: 13px; margin: 6px 0; }
+
+    .chartWrap {
+      position: relative;
+      height: 360px;
+      border: 1px solid #eee;
+      border-radius: 10px;
+      background: #fff;
+      padding: 8px;
+      margin: 10px 0;
+    }
+    .chartWrap canvas {
+      position: relative;
+      z-index: 1;
+      width: 100% !important;
+      height: 100% !important;
+      display: block;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>イベント分析（公開閲覧）</h1>
+  <p class="small">
+    このページは <b>閲覧専用</b>。ログイン欄・保存機能は排除。<br>
+    横軸は captured_at をUTCとして解釈し、表示は Asia/Tokyo 固定。
+  </p>
+
+  <div class="card">
+    <h2>公開データ読み込み</h2>
+    <div class="row">
+      <label>event_id：</label>
+      <input id="eventId" value="BA-2026-02" />
+      <button id="loadBtn">読み込む</button>
+    </div>
+
+    <div class="small">
+      Chart.js: <span id="chartVer"></span> / Luxon: <span id="luxonVer"></span>
+    </div>
+
+    <div class="chartWrap"><canvas id="participantsChart"></canvas></div>
+    <div class="chartWrap"><canvas id="difficultyChart"></canvas></div>
+
+    <h3>取得ログ</h3>
+    <pre id="readLog"></pre>
+
+    <h3>描画ログ</h3>
+    <pre id="drawLog"></pre>
+  </div>
+
+  <script>
+    const PROJECT_URL = "https://lfvxfvcijdtnpuhrlnqj.supabase.co";
+    const PUBLISHABLE_KEY = "sb_publishable_3oNlDsSU06CHAJkhrJ9Tvg_4WmLAZ6o";
+
+    const readLogEl = document.getElementById("readLog");
+    const drawLogEl = document.getElementById("drawLog");
+    const logRead = (s) => readLogEl.textContent += s + "\n";
+    const logDraw = (s) => drawLogEl.textContent += s + "\n";
+
+    document.getElementById("chartVer").textContent = (window.Chart && Chart.version) ? Chart.version : "NOT LOADED";
+    document.getElementById("luxonVer").textContent = (window.luxon && luxon.VERSION) ? luxon.VERSION : "NOT LOADED";
+
+    function makeLoadUrl(eventId) {
+      return `${PROJECT_URL}/rest/v1/snapshots_public` +
+        `?select=captured_at,participants,lunatic,torment,insane,extreme,hardcore,veryhard,hard,normal` +
+        `&event_id=eq.${encodeURIComponent(eventId)}` +
+        `&order=captured_at.asc`;
+    }
+
+    async function fetchJson(url) {
+      readLogEl.textContent = "";
+      logRead("REQUEST:");
+      logRead(url);
+
+      const res = await fetch(url, {
+        headers: {
+          apikey: PUBLISHABLE_KEY,
+          Authorization: `Bearer ${PUBLISHABLE_KEY}`,
+          Accept: "application/json"
+        }
+      });
+
+      const text = await res.text();
+      logRead("");
+      logRead(`STATUS: ${res.status}`);
+      logRead("");
+      logRead("RESPONSE (first 800 chars):");
+      logRead(text.slice(0, 800));
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${text}`);
+      return text ? JSON.parse(text) : [];
+    }
+
+    // captured_at（"2026-02-18T10:32:30"）を「UTC」として解釈してms化
+    function toMsUTC(x) {
+      const s = String(x).trim();
+      let dt = luxon.DateTime.fromISO(s, { zone: "utc" });
+      if (!dt.isValid) dt = luxon.DateTime.fromISO(s + "Z");
+      return dt.isValid ? dt.toMillis() : null;
+    }
+    function toNum(y) {
+      const n = Number(y);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    let chart1 = null, chart2 = null;
+
+    function renderCharts(rows) {
+      drawLogEl.textContent = "";
+      logDraw(`rows: ${rows.length}`);
+      if (!rows.length) { logDraw("データ0件"); return; }
+
+      const seriesXY = (key) => {
+        const pts = rows.map(r => ({ x: toMsUTC(r.captured_at), y: toNum(r[key]) }))
+                        .filter(p => p.x !== null && p.y !== null);
+        logDraw(`series "${key}" validPoints: ${pts.length}/${rows.length}`);
+        return pts;
+      };
+
+      const commonOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        normalized: true,
+        adapters: { date: { zone: "Asia/Tokyo" } },
+        scales: {
+          x: {
+            type: "time",
+            time: {
+              tooltipFormat: "yyyy-LL-dd HH:mm:ss",
+              displayFormats: { minute:"LL-dd HH:mm", hour:"LL-dd HH:mm", day:"LL-dd" }
+            }
+          }
+        }
+      };
+
+      const ctx1 = document.getElementById("participantsChart");
+      if (chart1) chart1.destroy();
+      chart1 = new Chart(ctx1, {
+        type: "line",
+        data: { datasets: [{
+          label: "参加人数",
+          data: seriesXY("participants"),
+          borderWidth: 3,
+          pointRadius: 2,
+          pointHitRadius: 10
+        }]},
+        options: commonOptions
+      });
+
+      const ctx2 = document.getElementById("difficultyChart");
+      if (chart2) chart2.destroy();
+      chart2 = new Chart(ctx2, {
+        type: "line",
+        data: { datasets: [
+          { label: "Lunatic",  data: seriesXY("lunatic"),  borderWidth: 2, pointRadius: 0 },
+          { label: "Torment",  data: seriesXY("torment"),  borderWidth: 2, pointRadius: 0 },
+          { label: "Insane",   data: seriesXY("insane"),   borderWidth: 2, pointRadius: 0 },
+          { label: "Extreme",  data: seriesXY("extreme"),  borderWidth: 2, pointRadius: 0 },
+          { label: "Hardcore", data: seriesXY("hardcore"), borderWidth: 2, pointRadius: 0 },
+          { label: "Veryhard", data: seriesXY("veryhard"), borderWidth: 2, pointRadius: 0 },
+          { label: "Hard",     data: seriesXY("hard"),     borderWidth: 2, pointRadius: 0 },
+          { label: "Normal",   data: seriesXY("normal"),   borderWidth: 2, pointRadius: 0 }
+        ]},
+        options: commonOptions
+      });
+
+      logDraw("draw: OK");
+    }
+
+    async function loadPublic() {
+      const eventId = document.getElementById("eventId").value.trim();
+      if (!eventId) return alert("event_id が空");
+      try {
+        const rows = await fetchJson(makeLoadUrl(eventId));
+        renderCharts(rows);
+      } catch (e) {
+        logDraw("loadPublic ERROR: " + e.message);
+      }
+    }
+
+    document.getElementById("loadBtn").addEventListener("click", loadPublic);
+    loadPublic();
+  </script>
+</body>
+</html>
