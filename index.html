@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>イベント分析（UI刷新版）</title>
+  <title>イベント分析</title>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/luxon@3.5.0/build/global/luxon.min.js"></script>
@@ -19,94 +19,106 @@
       --line:#e5e7eb;
       --shadow: 0 6px 18px rgba(0,0,0,.06);
       --r:14px;
+      --btn:#111827;
+      --btnText:#fff;
     }
-    *{ box-sizing: border-box; }
-    body{
-      margin:0;
-      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-      background: var(--bg);
-      color: var(--text);
-    }
-    a{ color: inherit; }
+    *{ box-sizing:border-box; }
+    body{ margin:0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--text); }
 
-    /* ====== Top Bar ====== */
+    /* ===== Top Bar ===== */
     .topbar{
-      position: sticky;
-      top:0;
-      z-index: 50;
-      background: rgba(255,255,255,.92);
+      position: sticky; top:0; z-index:50;
+      background: rgba(255,255,255,.94);
       backdrop-filter: blur(10px);
       border-bottom: 1px solid var(--line);
     }
     .topbar .inner{
       max-width: 1240px;
       margin: 0 auto;
-      padding: 10px 14px;
-      display:flex;
-      gap: 10px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-    .brand{
+      padding: 10px 12px;
       display:flex; align-items:center; gap:10px;
-      font-weight: 800;
+    }
+    .title{
+      font-weight: 900;
       letter-spacing: .2px;
+      white-space: nowrap;
     }
-    .pill{
-      font-size:12px;
-      padding: 3px 10px;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      color: var(--muted);
-      background: #fff;
-    }
-    .ctl{
-      display:flex; gap: 8px; align-items:center; flex-wrap: wrap;
-      margin-left: auto;
-    }
+    .grow{ flex: 1 1 auto; }
     .field{
-      display:flex; flex-direction: column; gap: 4px;
-      min-width: 220px;
+      display:flex; align-items:center; gap:8px;
+      min-width: 260px;
+      flex: 0 1 420px;
     }
-    .label{ font-size: 12px; color: var(--muted); }
-    input[type="text"]{
+    .field input{
       width:100%;
       padding: 9px 10px;
       border: 1px solid var(--line);
       border-radius: 12px;
-      background: #fff;
-      outline: none;
+      background:#fff;
+      outline:none;
+      font-size: 14px;
+      min-width: 140px;
     }
-    button{
+    .btn{
       border: 1px solid var(--line);
-      background: #fff;
+      background:#fff;
       border-radius: 12px;
       padding: 9px 10px;
-      cursor: pointer;
-      box-shadow: 0 1px 0 rgba(0,0,0,.02);
+      cursor:pointer;
+      font-size: 14px;
+      white-space: nowrap;
     }
-    button:hover{ filter: brightness(0.98); }
-    button.primary{
+    .btn.primary{
+      background: var(--btn);
+      color: var(--btnText);
       border-color: transparent;
-      background: #111827;
-      color: #fff;
     }
-    button.primary:hover{ filter: brightness(1.08); }
-    button.danger{
-      border-color: transparent;
-      background: #ef4444;
-      color:#fff;
+    .btn:disabled{ opacity:.55; cursor:not-allowed; }
+    .pill{
+      font-size:12px;
+      padding: 4px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      background:#fff;
+      white-space: nowrap;
     }
-    button:disabled{ opacity:.55; cursor:not-allowed; }
 
-    /* ====== Tabs ====== */
+    /* menu */
+    .menuWrap{ position: relative; }
+    .menu{
+      position:absolute; right:0; top: 44px;
+      background:#fff;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+      min-width: 220px;
+      padding: 8px;
+      display:none;
+    }
+    .menu.open{ display:block; }
+    .menu .row{
+      display:flex; gap:8px; align-items:center; justify-content:space-between;
+      padding: 6px;
+      border-radius: 10px;
+    }
+    .menu .row:hover{ background:#f3f4f6; }
+    .menu label{ font-size: 12px; color: var(--muted); }
+    .menu select{
+      width: 120px;
+      padding: 7px 8px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background:#fff;
+      outline:none;
+    }
+
+    /* ===== Tabs ===== */
     .tabs{
       max-width: 1240px;
-      margin: 10px auto 0;
-      padding: 0 14px;
-      display:flex;
-      gap: 8px;
-      flex-wrap: wrap;
+      margin: 8px auto 0;
+      padding: 0 12px 10px;
+      display:flex; gap:8px; flex-wrap: wrap;
     }
     .tab{
       padding: 8px 12px;
@@ -115,7 +127,8 @@
       background:#fff;
       color: var(--muted);
       cursor:pointer;
-      user-select: none;
+      user-select:none;
+      font-size: 13px;
     }
     .tab.active{
       background:#111827;
@@ -123,200 +136,214 @@
       border-color: transparent;
     }
 
-    /* ====== Layout ====== */
-    .container{
-      max-width: 1240px;
-      margin: 10px auto 30px;
-      padding: 0 14px;
-    }
-    .grid{
-      display:grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-    }
+    /* ===== Content ===== */
+    .container{ max-width:1240px; margin: 10px auto 30px; padding: 0 12px; }
+    .grid{ display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
     @media (max-width: 980px){ .grid{ grid-template-columns: 1fr; } }
 
     .card{
-      background: var(--card);
-      border: 1px solid var(--line);
+      background:var(--card);
+      border:1px solid var(--line);
       border-radius: var(--r);
       box-shadow: var(--shadow);
       padding: 12px;
     }
-    .card h2, .card h3{
-      margin: 0 0 8px;
-      font-size: 14px;
-    }
-    .muted{ color: var(--muted); font-size: 13px; line-height: 1.55; }
-    .kpis{
-      display:flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      margin: 8px 0 10px;
-    }
+
+    .kpis{ display:flex; gap:10px; flex-wrap: wrap; }
     .kpi{
-      border: 1px solid var(--line);
+      border:1px solid var(--line);
       border-radius: 12px;
+      background:#fff;
       padding: 8px 10px;
       min-width: 160px;
-      background: #fff;
+      flex: 1 1 160px;
     }
     .kpi .t{ font-size: 12px; color: var(--muted); }
-    .kpi .v{ font-size: 16px; font-weight: 800; margin-top: 2px; }
+    .kpi .v{ font-size: 16px; font-weight: 900; margin-top:2px; }
 
-    /* ====== Charts ====== */
+    /* ===== Charts ===== */
     .chartBlock{
-      border: 1px solid var(--line);
+      border:1px solid var(--line);
       border-radius: var(--r);
-      padding: 10px;
-      background: #fff;
-      margin: 10px 0;
+      box-shadow: var(--shadow);
+      background:#fff;
+      padding: 12px;
+      margin: 12px 0;
     }
     .chartTop{
-      display:flex;
-      gap: 10px;
-      align-items: center;
-      flex-wrap: wrap;
-      margin-bottom: 6px;
+      display:flex; align-items:center; justify-content:space-between;
+      gap:10px; flex-wrap: wrap;
+      margin-bottom: 8px;
     }
-    .chartTop .title{ font-weight: 800; }
-    .chartTop .mini{
-      font-size: 12px;
-      color: var(--muted);
-    }
+    .chartTop .t{ font-weight: 900; }
     .chartWrap{
-      position: relative;
+      position:relative;
       height: 340px;
       border: 1px solid #f0f0f0;
       border-radius: 12px;
-      overflow: hidden;
+      overflow:hidden;
       background:#fff;
     }
     .chartWrap.tall{ height: 380px; }
+
     canvas{
-      width: 100% !important;
-      height: 100% !important;
+      width:100% !important;
+      height:100% !important;
       display:block;
+      /* これがスマホ操作の肝：縦スクロールは生かして、ピンチを許可 */
       touch-action: pan-y pinch-zoom;
     }
 
-    .controls{
-      display:grid;
-      grid-template-columns: auto 1fr 1fr auto;
-      gap: 10px;
-      align-items: center;
-      margin-top: 8px;
+    .bottomCtl{
+      display:flex; align-items:center; gap:10px; flex-wrap: wrap;
+      margin-top: 10px;
     }
-    .rangeLabel{
-      font-size: 12px;
-      color: #374151;
-      text-align:right;
-    }
-    input[type="range"]{ width:100%; }
+    .mini{ font-size: 12px; color: var(--muted); }
 
-    /* ====== Loading ====== */
+    /* ===== One slider with two thumbs (looks like 1 control) ===== */
+    .rangeOne{
+      position: relative;
+      height: 34px;
+      flex: 1 1 420px;
+      min-width: 260px;
+    }
+    .rangeOne input[type="range"]{
+      position:absolute;
+      left:0; right:0; top: 8px;
+      width:100%;
+      margin:0;
+      pointer-events:none; /* 上に重ねるため：つまみだけ操作可能にする */
+      -webkit-appearance: none;
+      background: transparent;
+    }
+    .rangeOne input[type="range"]::-webkit-slider-thumb{
+      -webkit-appearance: none;
+      pointer-events:auto;
+      height: 18px; width: 18px;
+      border-radius: 999px;
+      border: 2px solid #111827;
+      background:#fff;
+      box-shadow: 0 2px 6px rgba(0,0,0,.12);
+    }
+    .rangeOne input[type="range"]::-moz-range-thumb{
+      pointer-events:auto;
+      height: 18px; width: 18px;
+      border-radius: 999px;
+      border: 2px solid #111827;
+      background:#fff;
+      box-shadow: 0 2px 6px rgba(0,0,0,.12);
+    }
+    .rangeTrack{
+      position:absolute;
+      left:0; right:0; top: 16px;
+      height: 6px;
+      border-radius: 999px;
+      background: #e5e7eb;
+    }
+    .rangeFill{
+      position:absolute;
+      top:0; height: 6px;
+      border-radius: 999px;
+      background: #111827;
+      left:0; width:100%;
+    }
+
+    /* ===== Loading ===== */
     #loadingMsg{
       display:none;
       align-items:center;
-      gap: 8px;
+      gap:8px;
+      margin-left: 10px;
       color: var(--muted);
-      margin-top: 8px;
       font-size: 13px;
+      white-space: nowrap;
     }
     #loadingMsg.visible{ display:flex; }
     .spinner{
-      width: 16px; height: 16px;
-      border: 2px solid #d1d5db;
-      border-top-color: #374151;
+      width: 14px; height: 14px;
+      border:2px solid #d1d5db;
+      border-top-color:#374151;
       border-radius: 50%;
       animation: spin .7s linear infinite;
     }
-    @keyframes spin{ to{ transform: rotate(360deg);} }
+    @keyframes spin{ to{ transform: rotate(360deg); } }
 
-    details{
-      border: 1px solid var(--line);
-      border-radius: var(--r);
-      background:#fff;
-      padding: 10px;
-      margin-top: 10px;
-    }
-    details summary{
-      cursor:pointer;
-      font-weight: 800;
-      color: #111827;
-      user-select: none;
-    }
     pre{
       background:#f6f6f6;
+      border: 1px solid #eee;
       border-radius: 12px;
       padding: 12px;
       overflow:auto;
-      border: 1px solid #eee;
-      margin: 10px 0 0;
       font-size: 12px;
       line-height: 1.5;
     }
 
-    /* ====== Responsive ====== */
+    /* ===== Mobile tweaks (make header 1-line-ish and avoid horizontal button bars) ===== */
     @media (max-width: 700px){
-      .ctl{ width:100%; }
-      .field{ min-width: 0; flex: 1 1 100%; }
-      .controls{ grid-template-columns: 1fr; gap: 8px; }
-      .rangeLabel{ text-align:left; }
-      button{ width: 100%; }
+      .topbar .inner{ gap:8px; }
+      .title{ font-size: 14px; }
+      .field{ min-width: 0; flex: 1 1 auto; }
+      .field input{ font-size: 14px; }
+      .pill{ display:none; }            /* スマホは情報ピル消す */
+      #loadingMsg{ display:none !important; } /* 上でゴチャつくので消す（必要ならログで見る） */
+
+      .tabs{ padding-bottom: 8px; }
+      .tab{ font-size: 12px; padding: 7px 10px; }
+
       .chartWrap{ height: 420px; }
       .chartWrap.tall{ height: 460px; }
-      input[type="range"]{ height: 34px; }
-      .kpi{ min-width: 0; flex: 1 1 45%; }
-    }
-    @media (min-width: 701px) and (max-width: 1024px){
-      .controls{ grid-template-columns: auto 1fr 1fr; }
-      .rangeLabel{ grid-column: 1 / -1; text-align:left; }
-      .chartWrap{ height: 380px; }
-      .chartWrap.tall{ height: 420px; }
+
+      .bottomCtl{ gap:8px; }
+      .btn{ padding: 10px 10px; }
+      .rangeOne{ min-width: 0; flex: 1 1 100%; }
+      .mini{ width: 100%; }
     }
   </style>
 </head>
 
 <body>
 
-<!-- ===== Topbar ===== -->
 <div class="topbar">
   <div class="inner">
-    <div class="brand">
-      <div>イベント分析</div>
-      <span class="pill" id="statusPill">待機</span>
-      <span class="pill">表示: JST / 取得: UTC</span>
-      <span class="pill">Chart.js <span id="chartVer"></span></span>
-      <span class="pill">Luxon <span id="luxonVer"></span></span>
-      <span class="pill">件数 <span id="rowCount">0</span></span>
+    <div class="title">イベント分析</div>
+
+    <div class="field grow">
+      <input id="eventId" type="text" value="BA-2026-02" aria-label="event_id">
     </div>
 
-    <div class="ctl">
-      <div class="field">
-        <div class="label">event_id</div>
-        <input id="eventId" type="text" value="BA-2026-02" />
-      </div>
+    <button class="btn primary" id="loadBtn">読み込む</button>
 
-      <button class="primary" id="loadBtn">読み込む</button>
-      <button id="jumpLatestBtn">最新へ</button>
-      <button id="resetAllBtn">全リセット</button>
-
-      <div class="field" style="min-width:260px;">
-        <div class="label">期間プリセット（全チャート）</div>
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button class="tab" data-range="all">全期間</button>
-          <button class="tab" data-range="24h">24h</button>
-          <button class="tab" data-range="12h">12h</button>
-          <button class="tab" data-range="6h">6h</button>
-          <button class="tab" data-range="1h">1h</button>
+    <div class="menuWrap">
+      <button class="btn" id="menuBtn" aria-label="メニュー">⋯</button>
+      <div class="menu" id="menu">
+        <div class="row">
+          <label>期間</label>
+          <select id="presetSelect">
+            <option value="all">全期間</option>
+            <option value="24h">24h</option>
+            <option value="12h">12h</option>
+            <option value="6h">6h</option>
+            <option value="1h">1h</option>
+          </select>
+        </div>
+        <div class="row">
+          <button class="btn" id="jumpLatestBtn" style="width:100%;">最新へ</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="resetAllBtn" style="width:100%;">全リセット</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="closeMenuBtn" style="width:100%;">閉じる</button>
         </div>
       </div>
     </div>
 
+    <div class="pill" id="statusPill">待機</div>
+    <div class="pill">件数 <span id="rowCount">0</span></div>
+    <div class="pill">JST表示 / UTC取得</div>
+
     <div id="loadingMsg">
-      <div class="spinner"></div>
-      <span id="loadingText">読み込み中…</span>
+      <div class="spinner"></div><span id="loadingText">読み込み中…</span>
     </div>
   </div>
 
@@ -332,11 +359,6 @@
 
   <div class="grid">
     <div class="card">
-      <h3>概要（最新）</h3>
-      <div class="muted">
-        captured_at は <b>UTC ISO</b>として読み込み、表示は <b>Asia/Tokyo（JST）</b>固定。<br>
-        操作：ホイール/ピンチでズーム、ドラッグでパン（横移動）、下のスライダーで範囲を確実に指定。
-      </div>
       <div class="kpis">
         <div class="kpi"><div class="t">最新時刻（JST）</div><div class="v" id="kpiTime">-</div></div>
         <div class="kpi"><div class="t">participants</div><div class="v" id="kpiP">-</div></div>
@@ -346,11 +368,6 @@
     </div>
 
     <div class="card">
-      <h3>整合・異常検知</h3>
-      <div class="muted">
-        「参加人数が減る」などは “ルール” じゃなくて <b>データ異常の検知</b>として扱う。<br>
-        合計ズレや急変もここで警告。
-      </div>
       <pre id="checkBox">未読み込み</pre>
     </div>
   </div>
@@ -360,57 +377,69 @@
 
     <div class="chartBlock">
       <div class="chartTop">
-        <div class="title">① 参加人数（participants）</div>
-        <div class="mini">点あり / ズーム・パン・スライダー対応</div>
+        <div class="t">① 参加人数（participants）</div>
+        <button class="btn" id="resetZoom_participants">ズーム解除</button>
       </div>
       <div class="chartWrap"><canvas id="chParticipants"></canvas></div>
-      <div class="controls">
-        <button id="resetZoom_participants">ズーム解除</button>
-        <input id="rangeStart_participants" type="range" min="0" max="100" value="0">
-        <input id="rangeEnd_participants" type="range" min="0" max="100" value="100">
-        <div class="rangeLabel" id="rangeLabel_participants"></div>
+
+      <div class="bottomCtl">
+        <div class="rangeOne" data-key="participants">
+          <div class="rangeTrack"><div class="rangeFill" id="fill_participants"></div></div>
+          <input id="rngA_participants" type="range" min="0" max="100" value="0" />
+          <input id="rngB_participants" type="range" min="0" max="100" value="100" />
+        </div>
+        <div class="mini" id="label_participants"></div>
       </div>
     </div>
 
     <div class="chartBlock">
       <div class="chartTop">
-        <div class="title">② 主戦場：Hardcore vs Extreme</div>
-        <div class="mini">比較が目的なので積み上げ禁止</div>
+        <div class="t">② 主戦場：Hardcore vs Extreme</div>
+        <button class="btn" id="resetZoom_main">ズーム解除</button>
       </div>
       <div class="chartWrap"><canvas id="chMain"></canvas></div>
-      <div class="controls">
-        <button id="resetZoom_main">ズーム解除</button>
-        <input id="rangeStart_main" type="range" min="0" max="100" value="0">
-        <input id="rangeEnd_main" type="range" min="0" max="100" value="100">
-        <div class="rangeLabel" id="rangeLabel_main"></div>
+
+      <div class="bottomCtl">
+        <div class="rangeOne" data-key="main">
+          <div class="rangeTrack"><div class="rangeFill" id="fill_main"></div></div>
+          <input id="rngA_main" type="range" min="0" max="100" value="0" />
+          <input id="rngB_main" type="range" min="0" max="100" value="100" />
+        </div>
+        <div class="mini" id="label_main"></div>
       </div>
     </div>
 
     <div class="chartBlock">
       <div class="chartTop">
-        <div class="title">③ 上位帯：Lunatic / Torment / Insane（非積み上げ固定）</div>
-        <div class="mini">凡例トグルしても勝手に積み上げ化しない</div>
+        <div class="t">③ 上位帯：Lunatic / Torment / Insane（非積み上げ）</div>
+        <button class="btn" id="resetZoom_top">ズーム解除</button>
       </div>
       <div class="chartWrap"><canvas id="chTop"></canvas></div>
-      <div class="controls">
-        <button id="resetZoom_top">ズーム解除</button>
-        <input id="rangeStart_top" type="range" min="0" max="100" value="0">
-        <input id="rangeEnd_top" type="range" min="0" max="100" value="100">
-        <div class="rangeLabel" id="rangeLabel_top"></div>
+
+      <div class="bottomCtl">
+        <div class="rangeOne" data-key="top">
+          <div class="rangeTrack"><div class="rangeFill" id="fill_top"></div></div>
+          <input id="rngA_top" type="range" min="0" max="100" value="0" />
+          <input id="rngB_top" type="range" min="0" max="100" value="100" />
+        </div>
+        <div class="mini" id="label_top"></div>
       </div>
     </div>
 
     <div class="chartBlock">
       <div class="chartTop">
-        <div class="title">④ 下位帯：VeryHard / Hard / Normal（積み上げ面）</div>
-        <div class="mini">層の“厚み”を見るための面</div>
+        <div class="t">④ 下位帯：VeryHard / Hard / Normal（積み上げ面）</div>
+        <button class="btn" id="resetZoom_low">ズーム解除</button>
       </div>
       <div class="chartWrap"><canvas id="chLow"></canvas></div>
-      <div class="controls">
-        <button id="resetZoom_low">ズーム解除</button>
-        <input id="rangeStart_low" type="range" min="0" max="100" value="0">
-        <input id="rangeEnd_low" type="range" min="0" max="100" value="100">
-        <div class="rangeLabel" id="rangeLabel_low"></div>
+
+      <div class="bottomCtl">
+        <div class="rangeOne" data-key="low">
+          <div class="rangeTrack"><div class="rangeFill" id="fill_low"></div></div>
+          <input id="rngA_low" type="range" min="0" max="100" value="0" />
+          <input id="rngB_low" type="range" min="0" max="100" value="100" />
+        </div>
+        <div class="mini" id="label_low"></div>
       </div>
     </div>
 
@@ -420,15 +449,18 @@
   <div id="tab_share" style="display:none;">
     <div class="chartBlock">
       <div class="chartTop">
-        <div class="title">⑤ シェア（%）：主要難易度</div>
-        <div class="mini">ズーム/スライダー後にY軸が自動フィット（見やすさ優先）</div>
+        <div class="t">⑤ シェア（%）</div>
+        <button class="btn" id="resetZoom_share">ズーム解除</button>
       </div>
       <div class="chartWrap tall"><canvas id="chShare"></canvas></div>
-      <div class="controls">
-        <button id="resetZoom_share">ズーム解除</button>
-        <input id="rangeStart_share" type="range" min="0" max="100" value="0">
-        <input id="rangeEnd_share" type="range" min="0" max="100" value="100">
-        <div class="rangeLabel" id="rangeLabel_share"></div>
+
+      <div class="bottomCtl">
+        <div class="rangeOne" data-key="share">
+          <div class="rangeTrack"><div class="rangeFill" id="fill_share"></div></div>
+          <input id="rngA_share" type="range" min="0" max="100" value="0" />
+          <input id="rngB_share" type="range" min="0" max="100" value="100" />
+        </div>
+        <div class="mini" id="label_share"></div>
       </div>
     </div>
   </div>
@@ -437,29 +469,26 @@
   <div id="tab_delta" style="display:none;">
     <div class="chartBlock">
       <div class="chartTop">
-        <div class="title">⑥ 速度（/h）：participants / Hardcore / Extreme</div>
-        <div class="mini">累積より“勢い”を見る。Δtが短いほどノイズが出るので注意</div>
+        <div class="t">⑥ 速度（/h）：participants / Hardcore / Extreme</div>
+        <button class="btn" id="resetZoom_rate">ズーム解除</button>
       </div>
       <div class="chartWrap"><canvas id="chRate"></canvas></div>
-      <div class="controls">
-        <button id="resetZoom_rate">ズーム解除</button>
-        <input id="rangeStart_rate" type="range" min="0" max="100" value="0">
-        <input id="rangeEnd_rate" type="range" min="0" max="100" value="100">
-        <div class="rangeLabel" id="rangeLabel_rate"></div>
+
+      <div class="bottomCtl">
+        <div class="rangeOne" data-key="rate">
+          <div class="rangeTrack"><div class="rangeFill" id="fill_rate"></div></div>
+          <input id="rngA_rate" type="range" min="0" max="100" value="0" />
+          <input id="rngB_rate" type="range" min="0" max="100" value="100" />
+        </div>
+        <div class="mini" id="label_rate"></div>
       </div>
     </div>
   </div>
 
   <!-- ===== Tab: logs ===== -->
   <div id="tab_logs" style="display:none;">
-    <details open>
-      <summary>取得ログ</summary>
-      <pre id="readLog"></pre>
-    </details>
-    <details open>
-      <summary>描画ログ</summary>
-      <pre id="drawLog"></pre>
-    </details>
+    <pre id="readLog"></pre>
+    <pre id="drawLog"></pre>
   </div>
 
 </div>
@@ -472,7 +501,7 @@
 
   const DIFF_KEYS = ["lunatic","torment","insane","extreme","hardcore","veryhard","hard","normal"];
   const COLOR = {
-    participants: "#111827",
+    participants:"#111827",
     lunatic:"#c0392b", torment:"#e67e22", insane:"#f1c40f",
     extreme:"#27ae60", hardcore:"#16a085", veryhard:"#2980b9",
     hard:"#8e44ad", normal:"#95a5a6",
@@ -494,16 +523,20 @@
   const kpiHC = document.getElementById("kpiHC");
   const kpiEX = document.getElementById("kpiEX");
 
+  const presetSelect = document.getElementById("presetSelect");
+  const jumpLatestBtn = document.getElementById("jumpLatestBtn");
+  const resetAllBtn = document.getElementById("resetAllBtn");
+
+  const menuBtn = document.getElementById("menuBtn");
+  const menu = document.getElementById("menu");
+  const closeMenuBtn = document.getElementById("closeMenuBtn");
+
   const logRead = (s)=> readLogEl.textContent += s + "\n";
   const logDraw = (s)=> drawLogEl.textContent += s + "\n";
-
-  document.getElementById("chartVer").textContent = (window.Chart && Chart.version) ? Chart.version : "NOT";
-  document.getElementById("luxonVer").textContent = (window.luxon && luxon.VERSION) ? luxon.VERSION : "NOT";
 
   function setStatus(text, kind="idle"){
     statusPill.textContent = text;
     statusPill.style.color = kind==="ok" ? "#16a34a" : kind==="warn" ? "#ea580c" : "#6b7280";
-    statusPill.style.borderColor = kind==="ok" ? "#bbf7d0" : kind==="warn" ? "#fed7aa" : "#e5e7eb";
   }
   function setLoading(on, text="読み込み中…"){
     loadBtn.disabled = on;
@@ -512,9 +545,18 @@
     setStatus(on ? "読み込み中" : "待機", on ? "warn" : "idle");
   }
 
+  // ===== Menu =====
+  function openMenu(){ menu.classList.add("open"); }
+  function closeMenu(){ menu.classList.remove("open"); }
+  menuBtn.addEventListener("click", ()=> menu.classList.toggle("open"));
+  closeMenuBtn.addEventListener("click", closeMenu);
+  document.addEventListener("click", (e)=>{
+    if(!menu.contains(e.target) && !menuBtn.contains(e.target)) closeMenu();
+  });
+
   // ===== Time format JST =====
   const jstFormatter = new Intl.DateTimeFormat("ja-JP", {
-    timeZone: "Asia/Tokyo",
+    timeZone:"Asia/Tokyo",
     year:"numeric", month:"2-digit", day:"2-digit",
     hour:"2-digit", minute:"2-digit", second:"2-digit",
     hour12:false
@@ -546,6 +588,7 @@
   }
   async function fetchAll(eventId){
     readLogEl.textContent = "";
+    drawLogEl.textContent = "";
     let all=[], offset=0, page=1;
     while(true){
       const url = makeLoadUrl(eventId, offset);
@@ -559,7 +602,7 @@
       offset += PAGE_SIZE;
       page++;
     }
-    logRead(`\n合計取得件数: ${all.length}`);
+    logRead(`合計取得件数: ${all.length}`);
     return all;
   }
 
@@ -607,6 +650,9 @@
     return out;
   }
 
+  // ===== Mobile/desktop zoom behavior =====
+  const isCoarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+
   // ===== Chart common =====
   function baseOptions(){
     return {
@@ -622,13 +668,14 @@
         legend:{ position:"top" },
         tooltip:{ mode:"index", intersect:false },
         decimation:{ enabled:true, algorithm:"lttb" },
-        filler:{ propagate:false }, // ← トグル事故の大本を封殺
+        filler:{ propagate:false },
         zoom:{
           pan:{ enabled:true, mode:"x" },
           zoom:{
-            wheel:{ enabled:true },
-            pinch:{ enabled:true },
-            drag:{ enabled:true, modifierKey:"shift" },
+            // スマホはピンチ中心。ホイールやドラッグズームは誤操作が出るので控えめ
+            wheel:{ enabled: !isCoarse },
+            pinch:{ enabled: true },
+            drag:{ enabled: !isCoarse },
             mode:"x"
           },
           limits:{}
@@ -661,6 +708,7 @@
     if(stack !== undefined) ds.stack = stack;
     return ds;
   }
+
   const clamp = (v,a,b)=> Math.max(a, Math.min(b, v));
 
   function lockZoomToData(chart, dataMin, dataMax){
@@ -674,12 +722,13 @@
     }
   }
 
-  function attachRangeControls({ chart, rowsN, key, onAfterRangeChange }){
-    const startEl = document.getElementById(`rangeStart_${key}`);
-    const endEl = document.getElementById(`rangeEnd_${key}`);
-    const labelEl = document.getElementById(`rangeLabel_${key}`);
-    const resetEl = document.getElementById(`resetZoom_${key}`);
-    if(!startEl || !endEl || !labelEl || !resetEl) return;
+  // ===== Two-thumb slider but as ONE control =====
+  function attachOneRange({ key, chart, rowsN, onAfterRangeChange }){
+    const a = document.getElementById(`rngA_${key}`);
+    const b = document.getElementById(`rngB_${key}`);
+    const fill = document.getElementById(`fill_${key}`);
+    const label = document.getElementById(`label_${key}`);
+    if(!a || !b || !fill || !label) return;
 
     const times = rowsN.map(r=>r.t);
     const dataMin = times[0], dataMax = times[times.length-1];
@@ -689,35 +738,40 @@
       return times[clamp(idx,0,times.length-1)];
     };
 
+    function setFill(p1, p2){
+      const left = Math.min(p1,p2);
+      const right = Math.max(p1,p2);
+      fill.style.left = `${left}%`;
+      fill.style.width = `${right-left}%`;
+    }
+
     function apply(){
-      let s = Number(startEl.value), e = Number(endEl.value);
-      if(s>e) [s,e]=[e,s];
-      const xmin = pctToMs(s), xmax = pctToMs(e);
+      let p1 = Number(a.value), p2 = Number(b.value);
+      if(p1>p2) [p1,p2] = [p2,p1];
+
+      const xmin = pctToMs(p1);
+      const xmax = pctToMs(p2);
+
       chart.options.scales.x.min = xmin;
       chart.options.scales.x.max = xmax;
       lockZoomToData(chart, dataMin, dataMax);
-      labelEl.textContent = `${fmtJST(xmin)} ～ ${fmtJST(xmax)}  (${s}%–${e}%)`;
       chart.update("none");
+
+      setFill(p1,p2);
+      label.textContent = `${fmtJST(xmin)} ～ ${fmtJST(xmax)}  (${p1}%–${p2}%)`;
+
       if(typeof onAfterRangeChange==="function") onAfterRangeChange();
     }
-    startEl.oninput = apply;
-    endEl.oninput = apply;
 
-    resetEl.onclick = ()=>{
-      startEl.value = 0; endEl.value = 100;
-      chart.options.scales.x.min = dataMin;
-      chart.options.scales.x.max = dataMax;
-      if(typeof chart.resetZoom==="function") chart.resetZoom();
-      lockZoomToData(chart, dataMin, dataMax);
-      labelEl.textContent = `${fmtJST(dataMin)} ～ ${fmtJST(dataMax)}  (0%–100%)`;
-      chart.update("none");
-      if(typeof onAfterRangeChange==="function") onAfterRangeChange();
-    };
+    a.addEventListener("input", apply);
+    b.addEventListener("input", apply);
 
-    labelEl.textContent = `${fmtJST(dataMin)} ～ ${fmtJST(dataMax)}  (0%–100%)`;
+    // init
+    setFill(Number(a.value), Number(b.value));
+    label.textContent = `${fmtJST(dataMin)} ～ ${fmtJST(dataMax)}  (0%–100%)`;
   }
 
-  // share Y auto fit
+  // ===== share Y auto-fit =====
   function autoFitYToVisible(chart, paddingRatio=0.08){
     const sx = chart.scales?.x;
     if(!sx) return;
@@ -744,7 +798,7 @@
     const z = chart?.options?.plugins?.zoom;
     if(!z) return;
     const prevZoom = z.zoom.onZoomComplete;
-    const prevPan = z.pan.onPanComplete;
+    const prevPan  = z.pan.onPanComplete;
 
     z.zoom.onZoomComplete = ({chart})=>{
       autoFitYToVisible(chart);
@@ -758,25 +812,22 @@
     };
   }
 
-  // ===== Charts instances =====
+  // ===== Instances =====
   let rowsN = [];
   let chParticipants=null, chMain=null, chTop=null, chLow=null, chShare=null, chRate=null;
 
   function destroyAll(){
-    for(const ch of [chParticipants,chMain,chTop,chLow,chShare,chRate]){
-      if(ch) ch.destroy();
-    }
+    for(const ch of [chParticipants,chMain,chTop,chLow,chShare,chRate]) if(ch) ch.destroy();
     chParticipants=chMain=chTop=chLow=chShare=chRate=null;
   }
 
-  // ===== Series helpers =====
+  // ===== Helpers =====
   const xy = (key)=> rowsN.map(r=>({x:r.t, y:r[key]}));
   const share = (key)=> rowsN.map(r=>({x:r.t, y:r.share[key]*100}));
   const rateP = ()=> rowsN.map(r=>({x:r.t, y:r.rate_participants}));
   const rate = (key)=> rowsN.map(r=>({x:r.t, y:r["rate_"+key]}));
 
-  // ===== Render KPIs & checks =====
-  function fmt(n){ return Number(n||0).toLocaleString("ja-JP"); }
+  const fmt = (n)=> Number(n||0).toLocaleString("ja-JP");
 
   function renderKPIs(){
     if(!rowsN.length){
@@ -794,30 +845,25 @@
   }
 
   function renderChecks(){
-    if(!rowsN.length){ checkBox.textContent="未読み込み"; return; }
+    if(!rowsN.length){ checkBox.textContent = "未読み込み"; return; }
     const last = rowsN[rowsN.length-1];
     const lines = [];
-    const gapAbs = Math.abs(last.gap);
 
-    if(gapAbs===0) lines.push(`合計チェック: OK（sum=participants）`);
-    else if(gapAbs<=50) lines.push(`合計チェック: 注意（ズレ ${fmt(last.gap)} / 許容50以内）`);
-    else lines.push(`合計チェック: NG（ズレ ${fmt(last.gap)}）`);
+    const gapAbs = Math.abs(last.gap);
+    if(gapAbs===0) lines.push(`sum=participants OK`);
+    else if(gapAbs<=50) lines.push(`sumズレ 注意: ${fmt(last.gap)}（<=50）`);
+    else lines.push(`sumズレ NG: ${fmt(last.gap)}`);
 
     if(rowsN.length>=2){
       const prev = rowsN[rowsN.length-2];
       const dP = last.participants - prev.participants;
-      const ratePct = prev.participants>0 ? (dP/prev.participants)*100 : 0;
-      lines.push(`Δparticipants: ${fmt(dP)} (${ratePct.toFixed(2)}%) / Δt=${last.dtHours.toFixed(3)}h`);
-      if(dP < 0) lines.push(`⚠ participantsが減少（データ異常の可能性）`);
-      if(Math.abs(ratePct) > 2.0) lines.push(`⚠ 急変（±2%超）`);
-      lines.push(`速度/時: participants=${last.rate_participants.toFixed(2)}  hardcore=${last.rate_hardcore.toFixed(2)}  extreme=${last.rate_extreme.toFixed(2)}`);
+      lines.push(`Δparticipants: ${fmt(dP)} / Δt=${last.dtHours.toFixed(3)}h / rate=${last.rate_participants.toFixed(2)}/h`);
+      if(dP<0) lines.push(`⚠ participantsが減少（データ異常の可能性）`);
     }
     checkBox.textContent = lines.join("\n");
   }
 
-  // ===== Render Charts =====
   function renderCharts(){
-    drawLogEl.textContent = "";
     destroyAll();
     if(!rowsN.length){ setStatus("0件","warn"); return; }
 
@@ -825,7 +871,8 @@
     renderKPIs();
     renderChecks();
 
-    const dataMin = rowsN[0].t, dataMax = rowsN[rowsN.length-1].t;
+    const dataMin = rowsN[0].t;
+    const dataMax = rowsN[rowsN.length-1].t;
 
     // ① participants
     {
@@ -837,7 +884,13 @@
         options: opt
       });
       lockZoomToData(chParticipants, dataMin, dataMax);
-      attachRangeControls({ chart: chParticipants, rowsN, key:"participants" });
+      attachOneRange({ key:"participants", chart: chParticipants, rowsN });
+      document.getElementById("resetZoom_participants").onclick = ()=>{
+        const a=document.getElementById("rngA_participants");
+        const b=document.getElementById("rngB_participants");
+        a.value=0; b.value=100; a.dispatchEvent(new Event("input"));
+        if(chParticipants.resetZoom) chParticipants.resetZoom();
+      };
     }
 
     // ② main (HC vs EX)
@@ -853,18 +906,22 @@
         options: opt
       });
       lockZoomToData(chMain, dataMin, dataMax);
-      attachRangeControls({ chart: chMain, rowsN, key:"main" });
+      attachOneRange({ key:"main", chart: chMain, rowsN });
+      document.getElementById("resetZoom_main").onclick = ()=>{
+        const a=document.getElementById("rngA_main");
+        const b=document.getElementById("rngB_main");
+        a.value=0; b.value=100; a.dispatchEvent(new Event("input"));
+        if(chMain.resetZoom) chMain.resetZoom();
+      };
     }
 
-    // ③ top band (L/T/I non-stacked fixed)
+    // ③ top band non-stacked
     {
       const opt = baseOptions();
-      opt.scales.y = { beginAtZero:true, stacked:false }; // 積み上げ禁止固定
-
+      opt.scales.y = { beginAtZero:true, stacked:false };
       const dsL = lineDS("Lunatic", xy("lunatic"), COLOR.lunatic, {fill:false, points:true});
       const dsT = lineDS("Torment", xy("torment"), COLOR.torment, {fill:false, points:true});
       const dsI = lineDS("Insane",  xy("insane"),  COLOR.insane,  {fill:false, points:true});
-      // stackを持たせない（凡例トグル事故対策）
       delete dsL.stack; delete dsT.stack; delete dsI.stack;
 
       chTop = new Chart(document.getElementById("chTop"),{
@@ -873,14 +930,19 @@
         options: opt
       });
       lockZoomToData(chTop, dataMin, dataMax);
-      attachRangeControls({ chart: chTop, rowsN, key:"top" });
+      attachOneRange({ key:"top", chart: chTop, rowsN });
+      document.getElementById("resetZoom_top").onclick = ()=>{
+        const a=document.getElementById("rngA_top");
+        const b=document.getElementById("rngB_top");
+        a.value=0; b.value=100; a.dispatchEvent(new Event("input"));
+        if(chTop.resetZoom) chTop.resetZoom();
+      };
     }
 
-    // ④ low band (stacked area)
+    // ④ low band stacked area
     {
       const opt = baseOptions();
       opt.scales.y = { beginAtZero:true, stacked:true };
-
       const dsN  = lineDS("Normal",   xy("normal"),   COLOR.normal,   {fill:"origin", points:false, stack:"low"});
       const dsH  = lineDS("Hard",     xy("hard"),     COLOR.hard,     {fill:"origin", points:false, stack:"low"});
       const dsVH = lineDS("VeryHard", xy("veryhard"), COLOR.veryhard, {fill:"origin", points:false, stack:"low"});
@@ -891,10 +953,16 @@
         options: opt
       });
       lockZoomToData(chLow, dataMin, dataMax);
-      attachRangeControls({ chart: chLow, rowsN, key:"low" });
+      attachOneRange({ key:"low", chart: chLow, rowsN });
+      document.getElementById("resetZoom_low").onclick = ()=>{
+        const a=document.getElementById("rngA_low");
+        const b=document.getElementById("rngB_low");
+        a.value=0; b.value=100; a.dispatchEvent(new Event("input"));
+        if(chLow.resetZoom) chLow.resetZoom();
+      };
     }
 
-    // ⑤ share (%)
+    // ⑤ share %
     {
       const opt = baseOptions();
       opt.scales.y = { beginAtZero:true, ticks:{ callback:(v)=> `${v}%` } };
@@ -915,109 +983,126 @@
       });
       lockZoomToData(chShare, dataMin, dataMax);
       hookShareAutoFit(chShare);
-
-      attachRangeControls({
+      attachOneRange({
+        key:"share",
         chart: chShare,
         rowsN,
-        key:"share",
         onAfterRangeChange: ()=>{ autoFitYToVisible(chShare); chShare.update("none"); }
       });
       autoFitYToVisible(chShare);
       chShare.update("none");
+
+      document.getElementById("resetZoom_share").onclick = ()=>{
+        const a=document.getElementById("rngA_share");
+        const b=document.getElementById("rngB_share");
+        a.value=0; b.value=100; a.dispatchEvent(new Event("input"));
+        if(chShare.resetZoom) chShare.resetZoom();
+        autoFitYToVisible(chShare);
+        chShare.update("none");
+      };
     }
 
-    // ⑥ rate (/h)
+    // ⑥ rate /h
     {
       const opt = baseOptions();
       opt.scales.y = { beginAtZero:false };
       chRate = new Chart(document.getElementById("chRate"),{
         type:"line",
         data:{ datasets:[
-          lineDS("参加/時",     rateP(),            COLOR.participants, {fill:false, points:true}),
-          lineDS("Hardcore/時", rate("hardcore"),   COLOR.hardcore,     {fill:false, points:true}),
-          lineDS("Extreme/時",  rate("extreme"),    COLOR.extreme,      {fill:false, points:true}),
+          lineDS("参加/時",     rateP(),          COLOR.participants, {fill:false, points:true}),
+          lineDS("Hardcore/時", rate("hardcore"), COLOR.hardcore,     {fill:false, points:true}),
+          lineDS("Extreme/時",  rate("extreme"),  COLOR.extreme,      {fill:false, points:true}),
         ]},
         options: opt
       });
       lockZoomToData(chRate, dataMin, dataMax);
-      attachRangeControls({ chart: chRate, rowsN, key:"rate" });
+      attachOneRange({ key:"rate", chart: chRate, rowsN });
+      document.getElementById("resetZoom_rate").onclick = ()=>{
+        const a=document.getElementById("rngA_rate");
+        const b=document.getElementById("rngB_rate");
+        a.value=0; b.value=100; a.dispatchEvent(new Event("input"));
+        if(chRate.resetZoom) chRate.resetZoom();
+      };
     }
 
-    logDraw(`draw OK / latest JST: ${fmtJST(rowsN[rowsN.length-1].captured_at)}`);
     setStatus("描画OK","ok");
+    logDraw(`draw OK / latest JST: ${fmtJST(rowsN[rowsN.length-1].captured_at)}`);
   }
 
-  // ===== Global range preset =====
+  // ===== Preset apply (global) =====
   function applyPreset(rangeKey){
     if(!rowsN.length) return;
     const dataMin = rowsN[0].t;
     const dataMax = rowsN[rowsN.length-1].t;
-
-    let xmin = dataMin, xmax = dataMax;
     const H = 3600000;
 
-    if(rangeKey==="24h"){ xmin = Math.max(dataMin, dataMax - 24*H); }
-    if(rangeKey==="12h"){ xmin = Math.max(dataMin, dataMax - 12*H); }
-    if(rangeKey==="6h"){  xmin = Math.max(dataMin, dataMax -  6*H); }
-    if(rangeKey==="1h"){  xmin = Math.max(dataMin, dataMax -  1*H); }
-    // allはそのまま
+    let xmin = dataMin, xmax = dataMax;
+    if(rangeKey==="24h") xmin = Math.max(dataMin, dataMax - 24*H);
+    if(rangeKey==="12h") xmin = Math.max(dataMin, dataMax - 12*H);
+    if(rangeKey==="6h")  xmin = Math.max(dataMin, dataMax -  6*H);
+    if(rangeKey==="1h")  xmin = Math.max(dataMin, dataMax -  1*H);
 
     const charts = [chParticipants,chMain,chTop,chLow,chShare,chRate].filter(Boolean);
     for(const ch of charts){
       ch.options.scales.x.min = xmin;
       ch.options.scales.x.max = xmax;
       lockZoomToData(ch, dataMin, dataMax);
-      if(typeof ch.resetZoom==="function") ch.resetZoom(); // zoom状態も整理
+      if(ch.resetZoom) ch.resetZoom();
       ch.update("none");
     }
-    // shareはYフィット
     if(chShare){ autoFitYToVisible(chShare); chShare.update("none"); }
 
-    // スライダー表示も「だいたい合わせる」（完全一致は不要、プリセット優先）
-    const approxPct = (ms)=>{
-      const idx = rowsN.findIndex(r=>r.t>=ms);
-      if(idx<=0) return 0;
+    // slider positions (approx)
+    const idxOf = (ms)=>{
+      let lo=0, hi=rowsN.length-1;
+      while(lo<hi){
+        const mid=(lo+hi)>>1;
+        if(rowsN[mid].t < ms) lo=mid+1; else hi=mid;
+      }
+      return lo;
+    };
+    const toPct = (ms)=>{
+      const idx = idxOf(ms);
       return Math.round((idx/(rowsN.length-1))*100);
     };
-    const sPct = approxPct(xmin);
-    const ePct = approxPct(xmax);
+    const p1 = toPct(xmin), p2 = toPct(xmax);
 
     const setPair = (k)=>{
-      const s=document.getElementById(`rangeStart_${k}`);
-      const e=document.getElementById(`rangeEnd_${k}`);
-      if(s && e){ s.value=sPct; e.value=ePct; s.dispatchEvent(new Event("input")); }
+      const a=document.getElementById(`rngA_${k}`);
+      const b=document.getElementById(`rngB_${k}`);
+      if(!a||!b) return;
+      a.value=p1; b.value=p2;
+      a.dispatchEvent(new Event("input"));
     };
     setPair("participants"); setPair("main"); setPair("top"); setPair("low"); setPair("share"); setPair("rate");
   }
 
-  // ===== Buttons =====
-  document.getElementById("jumpLatestBtn").onclick = ()=>{
+  presetSelect.addEventListener("change", ()=>{
+    applyPreset(presetSelect.value);
+  });
+  jumpLatestBtn.addEventListener("click", ()=>{
+    presetSelect.value = "1h";
     applyPreset("1h");
-  };
-  document.getElementById("resetAllBtn").onclick = ()=>{
+    closeMenu();
+  });
+  resetAllBtn.addEventListener("click", ()=>{
+    presetSelect.value = "all";
     applyPreset("all");
-    const charts=[chParticipants,chMain,chTop,chLow,chShare,chRate].filter(Boolean);
-    for(const ch of charts){ if(typeof ch.resetZoom==="function") ch.resetZoom(); ch.update("none"); }
-    if(chShare){ autoFitYToVisible(chShare); chShare.update("none"); }
-  };
+    closeMenu();
+  });
 
-  // ===== Tabs behavior =====
+  // ===== Tabs =====
   function showTab(name){
     document.getElementById("tab_numbers").style.display = (name==="numbers") ? "" : "none";
-    document.getElementById("tab_share").style.display   = (name==="share")   ? "" : "none";
-    document.getElementById("tab_delta").style.display   = (name==="delta")   ? "" : "none";
-    document.getElementById("tab_logs").style.display    = (name==="logs")    ? "" : "none";
+    document.getElementById("tab_share").style.display   = (name==="share") ? "" : "none";
+    document.getElementById("tab_delta").style.display   = (name==="delta") ? "" : "none";
+    document.getElementById("tab_logs").style.display    = (name==="logs") ? "" : "none";
     document.querySelectorAll(".tabs .tab").forEach(t=>{
       t.classList.toggle("active", t.dataset.tab===name);
     });
   }
   document.querySelectorAll(".tabs .tab").forEach(t=>{
     t.addEventListener("click", ()=> showTab(t.dataset.tab));
-  });
-
-  // ===== Preset buttons =====
-  document.querySelectorAll('button.tab[data-range]').forEach(b=>{
-    b.addEventListener("click", ()=> applyPreset(b.dataset.range));
   });
 
   // ===== Main load =====
@@ -1029,8 +1114,10 @@
       const rows = await fetchAll(eventId);
       rowsN = normalize(rows);
       rowCountEl.textContent = String(rowsN.length);
+      renderKPIs();
+      renderChecks();
       renderCharts();
-      // 初期は全期間
+      presetSelect.value = "all";
       applyPreset("all");
     }catch(e){
       setStatus("エラー","warn");
@@ -1040,13 +1127,12 @@
     }
   }
   loadBtn.addEventListener("click", load);
-
-  // auto-load
   load();
 </script>
 
 </body>
 </html>
+
 
 
 
